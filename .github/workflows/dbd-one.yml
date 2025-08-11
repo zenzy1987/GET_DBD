@@ -22,7 +22,7 @@ on:
         required: false
         default: "sheet"
   schedule:
-    - cron: "*/10 * * * *"   # ยิงทุก 10 นาที
+    - cron: "*/10 * * * *"   # ทุก 10 นาที
 
 concurrency:
   group: dbd-one
@@ -57,13 +57,24 @@ jobs:
           CHROME_PATH: ${{ steps.chrome.outputs.chrome-path }}
           GOOGLE_CREDENTIALS_JSON: ${{ secrets.GOOGLE_CREDENTIALS_JSON }}
           SHEET_ID: ${{ vars.SHEET_ID }}
+
+          # inputs จาก workflow_dispatch (ถ้ารันจาก schedule จะว่าง)
+          INPUT_TAX_ID:     ${{ inputs.tax_id }}
+          INPUT_LIMIT:      ${{ inputs.limit }}
+          INPUT_OFFSET:     ${{ inputs.offset }}
+          INPUT_SKIP:       ${{ inputs.skip_existing }}
         run: |
-          python dbd_one.py \
-            --list-file tax_ids.txt \
-            --tax-id "${{ inputs.tax_id }}" \
-            --limit "${{ inputs.limit }}" \
-            --offset "${{ inputs.offset }}" \
-            --skip-existing "${{ inputs.skip_existing }}" | tee result.txt
+          set -e
+          LIMIT="${INPUT_LIMIT:-50}"
+          OFFSET="${INPUT_OFFSET:-0}"
+          SKIP="${INPUT_SKIP:-sheet}"
+
+          ARGS=( --list-file tax_ids.txt --limit "$LIMIT" --offset "$OFFSET" --skip-existing "$SKIP" )
+          if [ -n "$INPUT_TAX_ID" ]; then
+            ARGS+=( --tax-id "$INPUT_TAX_ID" )
+          fi
+
+          python dbd_one.py "${ARGS[@]}" | tee result.txt
           echo "## DBD Result (last 200 lines)" >> $GITHUB_STEP_SUMMARY
           tail -n 200 result.txt >> $GITHUB_STEP_SUMMARY
 
@@ -82,3 +93,4 @@ jobs:
         with:
           name: dbd-json
           path: data/*.json
+          if-no-files-found: ignore
