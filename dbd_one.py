@@ -35,7 +35,7 @@ def build_driver():
     chrome_path = os.getenv("CHROME_PATH") or os.getenv("GOOGLE_CHROME_BIN")
     if chrome_path:
         opts.binary_location = chrome_path
-    driver = webdriver.Chrome(options=opts)  # Selenium Manager จะจัดการ chromedriver ให้เอง
+    driver = webdriver.Chrome(options=opts)  # Selenium Manager เลือก chromedriver ให้อัตโนมัติ
     driver.set_page_load_timeout(PAGE_LOAD_TIMEOUT)
     return driver
 
@@ -262,35 +262,33 @@ def main():
     ap.add_argument("--list-file", default="tax_ids.txt")
     ap.add_argument("--out-dir", default="data")
     ap.add_argument("--limit", type=int, default=50, help="จำนวนต่อรอบ (0=ทั้งหมด)")
-    ap.add_argument("--offset", type=int, default=0, help="ข้ามกี่รายการแรก")
+    ap.add_argument("--offset", type=int, default=0, help="ข้ามกี่รายการแรก (ปกติปล่อย 0 เมื่อใช้ skip)")
     ap.add_argument("--skip-existing", choices=["none","sheet","json","both"], default="sheet",
                     help="ข้ามเลขที่มีอยู่แล้วใน sheet/json")
     args = ap.parse_args()
 
-    ids = read_tax_ids(args.list_file)
-    if not ids:
+    ids_all = read_tax_ids(args.list_file)
+    if not ids_all:
         t = re.sub(r"\D","", args.tax_id)
         if not re.fullmatch(r"\d{13}", t):
             print("❌ ใส่เลขผู้เสียภาษี 13 หลักให้ถูกต้อง"); return
-        ids = [t]
-    else:
-        start = max(args.offset, 0)
-        end = (start + args.limit) if args.limit and args.limit > 0 else None
-        ids = ids[start:end]
+        ids_all = [t]
 
     os.makedirs(args.out_dir, exist_ok=True)
     ws = open_sheet()
 
-    # filter skip-existing
-    existing = set()
+    # รวมรายการที่ทำไปแล้ว → กรองก่อน แล้วค่อย slice
+    done = set()
     if args.skip_existing in ("sheet","both"):
-        existing |= existing_tax_ids_from_sheet(ws)
+        done |= existing_tax_ids_from_sheet(ws)
     if args.skip_existing in ("json","both"):
-        existing |= existing_tax_ids_from_json(args.out_dir)
-    if existing:
-        before = len(ids)
-        ids = [t for t in ids if t not in existing]
-        print(f"ข้ามที่มีอยู่แล้ว {before - len(ids)} รายการ → จะประมวลผล {len(ids)}")
+        done |= existing_tax_ids_from_json(args.out_dir)
+
+    remaining = [t for t in ids_all if t not in done]
+    start = max(args.offset, 0)
+    end = (start + args.limit) if args.limit and args.limit > 0 else None
+    ids = remaining[start:end]
+    print(f"เหลือในคิว {len(remaining)} รายการ → รอบนี้จะทำ {len(ids)} รายการ")
 
     driver = build_driver()
     try:
