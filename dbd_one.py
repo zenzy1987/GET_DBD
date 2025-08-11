@@ -6,6 +6,7 @@ from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException
@@ -23,13 +24,20 @@ def build_driver():
     ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125 Safari/537.36"
     opts.add_argument(f"--user-agent={ua}")
 
-    # ถ้า workflow ตั้ง CHROME_PATH/GOOGLE_CHROME_BIN ไว้ ให้ใช้
+    # ใช้ Chrome ที่ action ติดตั้งไว้
     chrome_path = os.getenv("CHROME_PATH") or os.getenv("GOOGLE_CHROME_BIN")
     if chrome_path:
         opts.binary_location = chrome_path
 
-    # ให้ Selenium Manager หา ChromeDriver ที่ตรงเวอร์ชันให้อัตโนมัติ
-    driver = webdriver.Chrome(options=opts)
+    # ถ้ามี WEBDRIVER_PATH ให้ชี้ใช้ตัวนั้น (ตรงเวอร์ชันกับ Chrome แน่นอน)
+    driver_path = os.getenv("WEBDRIVER_PATH")
+    if driver_path:
+        service = Service(driver_path)
+        driver = webdriver.Chrome(service=service, options=opts)
+    else:
+        # ไม่มี -> ให้ Selenium Manager เลือกให้เอง
+        driver = webdriver.Chrome(options=opts)
+
     driver.set_page_load_timeout(PAGE_LOAD_TIMEOUT)
     return driver
 
@@ -58,7 +66,7 @@ def go_home_and_search(driver, tax_id: str):
     except TimeoutException:
         pass
 
-    # ถ้าอยู่หน้ารายการผลลัพธ์ ให้คลิกลิงก์รายละเอียดตัวแรก
+    # ถ้าอยู่หน้าผลลัพธ์ ให้คลิก "รายละเอียด" อันแรก
     for txt in ["รายละเอียด", "ดูรายละเอียด", "ข้อมูลนิติบุคคล"]:
         links = driver.find_elements(By.XPATH, f"//a[contains(.,'{txt}')]")
         if links:
