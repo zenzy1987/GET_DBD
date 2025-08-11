@@ -22,7 +22,7 @@ from google.oauth2.service_account import Credentials
 PAGE_LOAD_TIMEOUT = 90
 BASE = "https://datawarehouse.dbd.go.th"
 
-# ---------------- Selenium helpers ----------------
+# ---------- Selenium helpers ----------
 def build_driver():
     opts = Options()
     opts.add_argument("--headless=new")
@@ -35,7 +35,7 @@ def build_driver():
     chrome_path = os.getenv("CHROME_PATH") or os.getenv("GOOGLE_CHROME_BIN")
     if chrome_path:
         opts.binary_location = chrome_path
-    driver = webdriver.Chrome(options=opts)  # Selenium Manager เลือก chromedriver ให้อัตโนมัติ
+    driver = webdriver.Chrome(options=opts)  # Selenium Manager เลือก chromedriver ให้เอง
     driver.set_page_load_timeout(PAGE_LOAD_TIMEOUT)
     return driver
 
@@ -98,7 +98,6 @@ def go_home_and_search(driver, tax_id: str):
             close_popup_if_any(driver)
             if safe_open_link(driver, links[0]):
                 return
-            # fallback: ใช้ href โดยตรง
             try:
                 href = links[0].get_attribute("href")
                 if href:
@@ -112,7 +111,7 @@ def wait_profile_loaded(driver):
     wait.until(EC.presence_of_element_located((By.XPATH, "//h4[contains(.,'เลขทะเบียนนิติบุคคล')]")))
     time.sleep(0.6)
 
-# ---------------- Parsing ----------------
+# ---------- Parsing ----------
 def extract_text_after_label(soup: BeautifulSoup, label: str) -> str:
     label_div = soup.find(lambda t: t.name == "div" and t.get_text(strip=True) == label)
     if not label_div: return ""
@@ -191,7 +190,7 @@ def scrape_one_id(driver, tax_id: str):
     data = parse_profile_html(html)
     return None if not data.get("เลขทะเบียน") or data["เลขทะเบียน"] in ("-","") else data
 
-# ---------------- Data / Sheets helpers ----------------
+# ---------- Data / Sheets helpers ----------
 HEADERS = [
     "tax_id","ชื่อ","เลขทะเบียน","สถานะ","วันที่จดทะเบียน","ทุนจดทะเบียน",
     "กลุ่มธุรกิจ","ขนาดธุรกิจ","ที่ตั้งสำนักงานใหญ่","กรรมการ",
@@ -208,7 +207,6 @@ def read_tax_ids(path: str):
                 if not line: continue
                 m = re.search(r"\b\d{13}\b", line)
                 if m: ids.append(m.group(0))
-    # unique & keep order
     seen=set(); out=[]
     for x in ids:
         if x not in seen: seen.add(x); out.append(x)
@@ -227,7 +225,6 @@ def open_sheet():
         raise RuntimeError("SHEET_ID not set.")
     sh = gc.open_by_key(sheet_id)
     ws = sh.get_worksheet(0)  # gid=0
-    # ensure headers
     first = ws.row_values(1)
     if first != HEADERS:
         ws.resize(1)
@@ -236,7 +233,7 @@ def open_sheet():
 
 def upsert_row(ws, row_dict):
     tax_id = row_dict["tax_id"]
-    col_vals = ws.col_values(1)  # A = tax_id
+    col_vals = ws.col_values(1)
     row_index = None
     for i, v in enumerate(col_vals[1:], start=2):
         if v == tax_id:
@@ -255,7 +252,7 @@ def existing_tax_ids_from_json(out_dir):
     if not os.path.isdir(out_dir): return set()
     return {fn[:-5] for fn in os.listdir(out_dir) if fn.endswith(".json")}
 
-# ---------------- Main ----------------
+# ---------- Main ----------
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--tax-id", default=os.getenv("TAX_ID", "0135563016845"))
@@ -277,7 +274,7 @@ def main():
     os.makedirs(args.out_dir, exist_ok=True)
     ws = open_sheet()
 
-    # รวมรายการที่ทำไปแล้ว → กรองก่อน แล้วค่อย slice
+    # กรองที่ทำแล้วก่อน → slice ตาม limit/offset
     done = set()
     if args.skip_existing in ("sheet","both"):
         done |= existing_tax_ids_from_sheet(ws)
@@ -310,16 +307,14 @@ def main():
                     **data,
                     "fetched_at_utc": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
                 }
-                # write json
                 fp = os.path.join(args.out_dir, f"{tax_id}.json")
                 with open(fp, "w", encoding="utf-8") as f:
                     json.dump(row, f, ensure_ascii=False, indent=2)
                 print(f"💾 saved: {fp}")
-                # upsert sheet
                 upsert_row(ws, row)
                 print("⬆️  updated Google Sheets")
 
-            time.sleep(random.uniform(1.0, 2.0))  # gentle throttle
+            time.sleep(random.uniform(1.0, 2.0))
     finally:
         try: driver.quit()
         except Exception: pass
