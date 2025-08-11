@@ -1,5 +1,8 @@
 name: dbd-one
 
+permissions:
+  contents: write
+
 on:
   workflow_dispatch:
     inputs:
