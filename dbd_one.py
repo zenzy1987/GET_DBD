@@ -6,16 +6,15 @@ from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from webdriver_manager.chrome import ChromeDriverManager
+from selenium.common.exceptions import TimeoutException
 
 PAGE_LOAD_TIMEOUT = 90
 
 def build_driver():
     opts = Options()
-    # ให้รันบน GitHub Actions
+    # สำหรับ GitHub Actions / headless
     opts.add_argument("--headless=new")
     opts.add_argument("--no-sandbox")
     opts.add_argument("--disable-dev-shm-usage")
@@ -23,12 +22,14 @@ def build_driver():
     opts.add_argument("--window-size=1365,900")
     ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125 Safari/537.36"
     opts.add_argument(f"--user-agent={ua}")
-    # ถ้า action ติดตั้ง Chrome แล้ว จะมี env นี้
+
+    # ถ้า workflow ตั้ง CHROME_PATH/GOOGLE_CHROME_BIN ไว้ ให้ใช้
     chrome_path = os.getenv("CHROME_PATH") or os.getenv("GOOGLE_CHROME_BIN")
     if chrome_path:
         opts.binary_location = chrome_path
-    service = Service(ChromeDriverManager().install())
-    driver = webdriver.Chrome(service=service, options=opts)
+
+    # ให้ Selenium Manager หา ChromeDriver ที่ตรงเวอร์ชันให้อัตโนมัติ
+    driver = webdriver.Chrome(options=opts)
     driver.set_page_load_timeout(PAGE_LOAD_TIMEOUT)
     return driver
 
@@ -45,14 +46,27 @@ def close_popup_if_any(driver):
 
 def go_home_and_search(driver, tax_id: str):
     driver.get("https://datawarehouse.dbd.go.th/index")
-    wait = WebDriverWait(driver, 30)
+    wait = WebDriverWait(driver, 40)
     close_popup_if_any(driver)
     sb = wait.until(EC.visibility_of_element_located((By.CSS_SELECTOR, "input#key-word.form-control")))
     sb.clear(); sb.send_keys(tax_id); time.sleep(0.2); sb.send_keys(Keys.ENTER)
 
+    # พยายามรอให้เข้าหน้าโปรไฟล์เลย
+    try:
+        wait.until(EC.presence_of_element_located((By.XPATH, "//h4[contains(.,'เลขทะเบียนนิติบุคคล')]")))
+        return
+    except TimeoutException:
+        pass
+
+    # ถ้าอยู่หน้ารายการผลลัพธ์ ให้คลิกลิงก์รายละเอียดตัวแรก
+    for txt in ["รายละเอียด", "ดูรายละเอียด", "ข้อมูลนิติบุคคล"]:
+        links = driver.find_elements(By.XPATH, f"//a[contains(.,'{txt}')]")
+        if links:
+            links[0].click()
+            break
+
 def wait_profile_loaded(driver):
     wait = WebDriverWait(driver, 40)
-    # รอให้มีส่วนรายละเอียดขึ้น (ไม่บังคับว่าต้องมีเลขภาษีในหัวข้อ)
     wait.until(EC.presence_of_element_located((By.XPATH, "//h4[contains(.,'เลขทะเบียนนิติบุคคล')]")))
     time.sleep(0.8)
 
@@ -142,13 +156,12 @@ def main():
         data = scrape_one_id(driver, tax_id)
         if not data:
             print("⚠️  ไม่พบข้อมูล/อ่านไม่สำเร็จ"); return
-        print("✅ พบข้อมูล (ตัดตัวอย่างแสดง):")
+        print("✅ พบข้อมูล:")
         print(json.dumps(data, ensure_ascii=False, indent=2))
     finally:
         try: driver.quit()
         except: pass
 
 if __name__ == "__main__":
-    # กันโดน throttle
-    time.sleep(random.uniform(1.2, 2.5))
+    time.sleep(random.uniform(1.2, 2.5))  # กัน throttle เบื้องต้น
     main()
