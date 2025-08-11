@@ -7,15 +7,27 @@ on:
   workflow_dispatch:
     inputs:
       tax_id:
-        description: "เลขภาษี 13 หลัก (ถ้าเว้นไว้จะอ่านจาก tax_ids.txt)"
+        description: "ถ้าว่างจะอ่านจาก tax_ids.txt"
         required: false
-        default: "0135563016845"
+      limit:
+        description: "จำนวนต่อรอบ (0=ทั้งหมด)"
+        required: false
+        default: "50"
+      offset:
+        description: "ข้ามรายการแรกกี่อัน"
+        required: false
+        default: "0"
+      skip_existing:
+        description: "none/sheet/json/both"
+        required: false
+        default: "sheet"
 
 jobs:
   run:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -39,14 +51,27 @@ jobs:
           GOOGLE_CREDENTIALS_JSON: ${{ secrets.GOOGLE_CREDENTIALS_JSON }}
           SHEET_ID: ${{ vars.SHEET_ID }}
         run: |
-          python dbd_one.py --list-file "tax_ids.txt" --tax-id "${{ inputs.tax_id }}" | tee result.txt
-          echo "## DBD Result" >> $GITHUB_STEP_SUMMARY
-          sed -n '1,200p' result.txt >> $GITHUB_STEP_SUMMARY
+          python dbd_one.py \
+            --list-file "tax_ids.txt" \
+            --tax-id "${{ inputs.tax_id }}" \
+            --limit "${{ inputs.limit }}" \
+            --offset "${{ inputs.offset }}" \
+            --skip-existing "${{ inputs.skip_existing }}" | tee result.txt
+          echo "## DBD Result (last 200 lines)" >> $GITHUB_STEP_SUMMARY
+          tail -n 200 result.txt >> $GITHUB_STEP_SUMMARY
 
-      - name: Commit JSON results to repo (optional)
+      - name: Commit JSON results to repo
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add data || true
           git commit -m "DBD batch $(date -u +'%Y-%m-%dT%H:%M:%SZ')" || echo "Nothing to commit"
-          git push
+          git pull --rebase origin "${{ github.ref_name }}" || true
+          git push origin HEAD:"${{ github.ref_name }}" || echo "push skipped"
+
+      - name: Upload JSONs as artifact (always)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dbd-json
+          path: data/*.json
