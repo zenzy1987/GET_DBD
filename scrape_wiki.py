@@ -11,29 +11,21 @@ def fetch_summary(term: str, lang: str = "th"):
     return r.json()
 
 def main():
-    p = argparse.ArgumentParser(description="Print Wikipedia summary to terminal")
-    p.add_argument("--term", default="ประเทศไทย", help="คำที่ต้องค้นหา (เช่น ประเทศไทย, Thailand)")
-    p.add_argument("--lang", default="th", help="ภาษา (th หรือ en)")
+    p = argparse.ArgumentParser()
+    p.add_argument("--term", default="ประเทศไทย")
+    p.add_argument("--lang", default="th")
     args = p.parse_args()
-
     data = fetch_summary(args.term, args.lang)
     if not data:
-        print(f"❌ ไม่พบหน้าในวิกิพีเดีย: {args.term} ({args.lang})")
-        sys.exit(1)
-
-    title = data.get("title", "")
-    desc = data.get("description") or ""
-    extract = (data.get("extract") or "").replace("\n", " ").strip()
-    link = (data.get("content_urls", {}).get("desktop", {}) or {}).get("page", "")
-
+        print(f"❌ ไม่พบหน้า: {args.term} ({args.lang})"); sys.exit(1)
+    title = data.get("title",""); desc = data.get("description") or ""
+    extract = (data.get("extract") or "").replace("\n"," ").strip()
+    link = (data.get("content_urls",{}).get("desktop",{}) or {}).get("page","")
     print("✅ ผลการค้นหา")
     print(f"  ชื่อเรื่อง : {title}")
-    if desc:
-        print(f"  คำอธิบาย : {desc}")
-    if link:
-        print(f"  ลิงก์     : {link}")
-    print("  สรุปย่อ  :")
-    print(" ", extract[:600] + ("…" if len(extract) > 600 else ""))
+    if desc: print(f"  คำอธิบาย : {desc}")
+    if link: print(f"  ลิงก์     : {link}")
+    print("  สรุปย่อ  :"); print(" ", extract[:600] + ("…" if len(extract)>600 else ""))
 
 if __name__ == "__main__":
     main()
