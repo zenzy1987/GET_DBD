@@ -1,21 +1,25 @@
 # -*- coding: utf-8 -*-
 import os, re, time, random, json, argparse
+from datetime import datetime, timezone
 from bs4 import BeautifulSoup
 
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException
 
+# ---- Google Sheets ----
+import gspread
+from google.oauth2.service_account import Credentials
+
 PAGE_LOAD_TIMEOUT = 90
 
+# ===== Selenium =====
 def build_driver():
     opts = Options()
-    # สำหรับ GitHub Actions / headless
     opts.add_argument("--headless=new")
     opts.add_argument("--no-sandbox")
     opts.add_argument("--disable-dev-shm-usage")
@@ -23,21 +27,10 @@ def build_driver():
     opts.add_argument("--window-size=1365,900")
     ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125 Safari/537.36"
     opts.add_argument(f"--user-agent={ua}")
-
-    # ใช้ Chrome ที่ action ติดตั้งไว้
     chrome_path = os.getenv("CHROME_PATH") or os.getenv("GOOGLE_CHROME_BIN")
     if chrome_path:
         opts.binary_location = chrome_path
-
-    # ถ้ามี WEBDRIVER_PATH ให้ชี้ใช้ตัวนั้น (ตรงเวอร์ชันกับ Chrome แน่นอน)
-    driver_path = os.getenv("WEBDRIVER_PATH")
-    if driver_path:
-        service = Service(driver_path)
-        driver = webdriver.Chrome(service=service, options=opts)
-    else:
-        # ไม่มี -> ให้ Selenium Manager เลือกให้เอง
-        driver = webdriver.Chrome(options=opts)
-
+    driver = webdriver.Chrome(options=opts)      # Selenium Manager เลือก driver ให้เอง
     driver.set_page_load_timeout(PAGE_LOAD_TIMEOUT)
     return driver
 
@@ -58,15 +51,11 @@ def go_home_and_search(driver, tax_id: str):
     close_popup_if_any(driver)
     sb = wait.until(EC.visibility_of_element_located((By.CSS_SELECTOR, "input#key-word.form-control")))
     sb.clear(); sb.send_keys(tax_id); time.sleep(0.2); sb.send_keys(Keys.ENTER)
-
-    # พยายามรอให้เข้าหน้าโปรไฟล์เลย
     try:
         wait.until(EC.presence_of_element_located((By.XPATH, "//h4[contains(.,'เลขทะเบียนนิติบุคคล')]")))
         return
     except TimeoutException:
         pass
-
-    # ถ้าอยู่หน้าผลลัพธ์ ให้คลิก "รายละเอียด" อันแรก
     for txt in ["รายละเอียด", "ดูรายละเอียด", "ข้อมูลนิติบุคคล"]:
         links = driver.find_elements(By.XPATH, f"//a[contains(.,'{txt}')]")
         if links:
@@ -92,8 +81,7 @@ def extract_text_after_label(soup: BeautifulSoup, label: str) -> str:
 
 def parse_profile_html(html: str):
     soup = BeautifulSoup(html, "html.parser")
-    h3 = soup.find("h3")
-    h4 = soup.find("h4")
+    h3 = soup.find("h3"); h4 = soup.find("h4")
     name = re.sub(r"^ชื่อนิติบุคคล\s*:\s*", "", h3.get_text(" ", strip=True) if h3 else "") or "-"
     reg  = re.sub(r"^เลขทะเบียนนิติบุคคล:\s*", "", h4.get_text(" ", strip=True) if h4 else "") or "-"
     status_text = extract_text_after_label(soup, "สถานะนิติบุคคล") or "-"
@@ -150,26 +138,108 @@ def scrape_one_id(driver, tax_id: str):
     data = parse_profile_html(html)
     return None if not data.get("เลขทะเบียน") or data["เลขทะเบียน"] in ("-","") else data
 
+# ===== Helpers =====
+HEADERS = [
+    "tax_id","ชื่อ","เลขทะเบียน","สถานะ","วันที่จดทะเบียน","ทุนจดทะเบียน",
+    "กลุ่มธุรกิจ","ขนาดธุรกิจ","ที่ตั้งสำนักงานใหญ่","กรรมการ",
+    "TSIC ตอนจดทะเบียน","วัตถุประสงค์ตอนจดทะเบียน","TSIC ล่าสุด","วัตถุประสงค์ล่าสุด",
+    "fetched_at_utc"
+]
+
+def read_tax_ids(path: str):
+    ids = []
+    if not path or not os.path.exists(path): return ids
+    with open(path, "r", encoding="utf-8") as f:
+        for line in f:
+            line = line.split("#", 1)[0].strip()
+            if not line: continue
+            m = re.search(r"\b\d{13}\b", line)
+            if m: ids.append(m.group(0))
+    seen=set(); out=[]
+    for x in ids:
+        if x not in seen: seen.add(x); out.append(x)
+    return out
+
+# ===== Google Sheets =====
+def open_sheet():
+    creds_json = os.getenv("GOOGLE_CREDENTIALS_JSON")
+    if not creds_json:
+        raise RuntimeError("GOOGLE_CREDENTIALS_JSON is empty. Add repository secret.")
+    info = json.loads(creds_json)
+    scopes = ["https://www.googleapis.com/auth/spreadsheets","https://www.googleapis.com/auth/drive"]
+    creds = Credentials.from_service_account_info(info, scopes=scopes)
+    gc = gspread.authorize(creds)
+    sheet_id = os.getenv("SHEET_ID")
+    if not sheet_id:
+        raise RuntimeError("SHEET_ID not set.")
+    sh = gc.open_by_key(sheet_id)
+    ws = sh.get_worksheet(0)  # gid=0
+    # ensure headers
+    first = ws.row_values(1)
+    if first != HEADERS:
+        ws.resize(1)
+        ws.update("A1", [HEADERS])
+    return ws
+
+def upsert_row(ws, row_dict):
+    # key = tax_id
+    tax_id = row_dict["tax_id"]
+    # หา index คอลัมน์ tax_id
+    headers = HEADERS
+    col_idx = headers.index("tax_id") + 1
+    col_vals = ws.col_values(col_idx)
+    row_index = None
+    for i, v in enumerate(col_vals[1:], start=2):  # ข้ามหัวตาราง
+        if v == tax_id:
+            row_index = i
+            break
+    values = [row_dict.get(h, "") for h in headers]
+    if row_index:
+        ws.update(f"A{row_index}", [values])
+    else:
+        ws.append_row(values, value_input_option="USER_ENTERED")
+
+# ===== Main =====
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--tax-id", default=os.getenv("TAX_ID", "0135563016845"))
+    ap.add_argument("--list-file", default="tax_ids.txt")
+    ap.add_argument("--out-dir", default="data")
     args = ap.parse_args()
-    tax_id = re.sub(r"\D", "", args.tax_id)
-    if not re.fullmatch(r"\d{13}", tax_id):
-        print("❌ ใส่เลขผู้เสียภาษี 13 หลักให้ถูกต้อง"); return
+
+    ids = read_tax_ids(args.list_file)
+    if not ids:
+        t = re.sub(r"\D","", args.tax_id)
+        if not re.fullmatch(r"\d{13}", t):
+            print("❌ ใส่เลขผู้เสียภาษี 13 หลักให้ถูกต้อง"); return
+        ids = [t]
+
+    os.makedirs(args.out_dir, exist_ok=True)
+    ws = open_sheet()
 
     driver = build_driver()
     try:
-        print(f"🔎 ค้นหาเลขภาษี: {tax_id}")
-        data = scrape_one_id(driver, tax_id)
-        if not data:
-            print("⚠️  ไม่พบข้อมูล/อ่านไม่สำเร็จ"); return
-        print("✅ พบข้อมูล:")
-        print(json.dumps(data, ensure_ascii=False, indent=2))
+        for i, tax_id in enumerate(ids, start=1):
+            print(f"\n🔎 [{i}/{len(ids)}] ค้นหาเลขภาษี: {tax_id}")
+            data = scrape_one_id(driver, tax_id)
+            if not data:
+                print("⚠️  ไม่พบข้อมูล/อ่านไม่สำเร็จ")
+                continue
+            # enrich + save file
+            row = {"tax_id": tax_id, **data, "fetched_at_utc": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")}
+            print("✅ พบข้อมูล:"); print(json.dumps(row, ensure_ascii=False, indent=2))
+            fp = os.path.join(args.out_dir, f"{tax_id}.json")
+            with open(fp, "w", encoding="utf-8") as f:
+                json.dump(row, f, ensure_ascii=False, indent=2)
+            print(f"💾 saved: {fp}")
+            # upsert to Google Sheets
+            upsert_row(ws, row)
+            print("⬆️  updated Google Sheets")
+            time.sleep(random.uniform(1.0, 2.0))
     finally:
         try: driver.quit()
         except: pass
 
 if __name__ == "__main__":
-    time.sleep(random.uniform(1.2, 2.5))  # กัน throttle เบื้องต้น
+    time.sleep(random.uniform(1.2, 2.5))
     main()
