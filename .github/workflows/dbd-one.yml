@@ -1,0 +1,41 @@
+name: dbd-one
+
+on:
+  workflow_dispatch:
+    inputs:
+      tax_id:
+        description: "เลขภาษี 13 หลัก"
+        required: false
+        default: "0135563016845"
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # ติดตั้ง Google Chrome ให้ Selenium ใช้
+      - name: Setup Chrome
+        id: chrome
+        uses: browser-actions/setup-chrome@v1
+
+      - name: Verify Chrome
+        run: |
+          "${{ steps.chrome.outputs.chrome-path }}" --version
+
+      - name: Install deps
+        run: |
+          python -m pip install -U pip
+          pip install -r requirements.txt
+
+      - name: Run DBD one-off
+        env:
+          CHROME_PATH: ${{ steps.chrome.outputs.chrome-path }}
+        run: |
+          python dbd_one.py --tax-id "${{ inputs.tax_id }}" | tee result.txt
+          echo "## DBD Result" >> $GITHUB_STEP_SUMMARY
+          sed -n '1,200p' result.txt >> $GITHUB_STEP_SUMMARY
