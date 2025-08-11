@@ -18,14 +18,29 @@ jobs:
         with:
           python-version: "3.12"
 
-      # ติดตั้ง Chrome ให้ Selenium ใช้
+      # ติดตั้ง Chrome
       - name: Setup Chrome
         id: chrome
         uses: browser-actions/setup-chrome@v1
 
-      - name: Verify Chrome
+      # ติดตั้ง Chromedriver ที่ "ตรงเวอร์ชันกับ Chrome"
+      - name: Setup Chromedriver (match Chrome)
+        id: driver
+        uses: browser-actions/setup-chromedriver@v1
+        with:
+          chrome-version: ${{ steps.chrome.outputs.chrome-version }}
+
+      # ลบตัวเก่าที่ติดมากับ runner ออกกันชน PATH
+      - name: Remove stale chromedriver in PATH
         run: |
-          "${{ steps.chrome.outputs.chrome-path }}" --version
+          which chromedriver || true
+          sudo rm -f /usr/bin/chromedriver || true
+
+      - name: Verify versions
+        run: |
+          echo "Chrome:     ${{ steps.chrome.outputs.chrome-version }}"
+          echo "Chromedriver path: ${{ steps.driver.outputs.chromedriver-path }}"
+          ${{ steps.driver.outputs.chromedriver-path }} --version
 
       - name: Install deps
         run: |
@@ -35,6 +50,7 @@ jobs:
       - name: Run DBD one-off
         env:
           CHROME_PATH: ${{ steps.chrome.outputs.chrome-path }}
+          WEBDRIVER_PATH: ${{ steps.driver.outputs.chromedriver-path }}
         run: |
           python dbd_one.py --tax-id "${{ inputs.tax_id }}" | tee result.txt
           echo "## DBD Result" >> $GITHUB_STEP_SUMMARY
