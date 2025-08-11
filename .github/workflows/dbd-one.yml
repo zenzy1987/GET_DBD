@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       tax_id:
-        description: "เลขภาษี 13 หลัก"
+        description: "เลขภาษี 13 หลัก (ถ้าเว้นไว้จะอ่านจาก tax_ids.txt)"
         required: false
         default: "0135563016845"
 
@@ -13,32 +13,37 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
 
-      # ติดตั้ง Chrome (มีจริง)
       - name: Setup Chrome
         id: chrome
         uses: browser-actions/setup-chrome@v1
 
-      # ลบ chromedriver เก่าที่อยู่ใน PATH กันชนไม่ให้ถูกใช้
       - name: Remove stale chromedriver in PATH
         run: |
-          which chromedriver || true
           sudo rm -f /usr/bin/chromedriver || true
-          command -v chromedriver || echo "chromedriver removed"
 
       - name: Install deps
         run: |
           python -m pip install -U pip
           pip install -r requirements.txt
 
-      - name: Run DBD one-off
+      - name: Run DBD batch → Google Sheets
         env:
           CHROME_PATH: ${{ steps.chrome.outputs.chrome-path }}
+          GOOGLE_CREDENTIALS_JSON: ${{ secrets.GOOGLE_CREDENTIALS_JSON }}
+          SHEET_ID: ${{ vars.SHEET_ID }}
         run: |
-          python dbd_one.py --tax-id "${{ inputs.tax_id }}" | tee result.txt
+          python dbd_one.py --list-file "tax_ids.txt" --tax-id "${{ inputs.tax_id }}" | tee result.txt
           echo "## DBD Result" >> $GITHUB_STEP_SUMMARY
           sed -n '1,200p' result.txt >> $GITHUB_STEP_SUMMARY
+
+      - name: Commit JSON results to repo (optional)
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data || true
+          git commit -m "DBD batch $(date -u +'%Y-%m-%dT%H:%M:%SZ')" || echo "Nothing to commit"
+          git push
