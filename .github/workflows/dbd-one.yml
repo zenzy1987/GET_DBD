@@ -14,17 +14,25 @@ on:
         required: false
         default: "50"
       offset:
-        description: "ข้ามรายการแรกกี่อัน"
+        description: "ข้ามรายการแรกกี่อัน (ปกติ 0)"
         required: false
         default: "0"
       skip_existing:
         description: "none/sheet/json/both"
         required: false
         default: "sheet"
+  schedule:
+    - cron: "*/10 * * * *"   # ยิงทุก 10 นาที
+
+concurrency:
+  group: dbd-one
+  cancel-in-progress: false
 
 jobs:
   run:
     runs-on: ubuntu-latest
+    timeout-minutes: 25
+
     steps:
       - uses: actions/checkout@v4
 
@@ -37,8 +45,7 @@ jobs:
         uses: browser-actions/setup-chrome@v1
 
       - name: Remove stale chromedriver in PATH
-        run: |
-          sudo rm -f /usr/bin/chromedriver || true
+        run: sudo rm -f /usr/bin/chromedriver || true
 
       - name: Install deps
         run: |
@@ -52,7 +59,7 @@ jobs:
           SHEET_ID: ${{ vars.SHEET_ID }}
         run: |
           python dbd_one.py \
-            --list-file "tax_ids.txt" \
+            --list-file tax_ids.txt \
             --tax-id "${{ inputs.tax_id }}" \
             --limit "${{ inputs.limit }}" \
             --offset "${{ inputs.offset }}" \
