@@ -1,23 +1,28 @@
 # -*- coding: utf-8 -*-
 import os, re, time, random, json, argparse
 from datetime import datetime, timezone
+from urllib.parse import urljoin
 from bs4 import BeautifulSoup
 
+# Selenium
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.common.exceptions import TimeoutException
+from selenium.common.exceptions import (
+    TimeoutException, ElementClickInterceptedException, StaleElementReferenceException
+)
 
-# ---- Google Sheets ----
+# Google Sheets
 import gspread
 from google.oauth2.service_account import Credentials
 
 PAGE_LOAD_TIMEOUT = 90
+BASE = "https://datawarehouse.dbd.go.th"
 
-# ===== Selenium =====
+# ---------------- Selenium helpers ----------------
 def build_driver():
     opts = Options()
     opts.add_argument("--headless=new")
@@ -30,43 +35,84 @@ def build_driver():
     chrome_path = os.getenv("CHROME_PATH") or os.getenv("GOOGLE_CHROME_BIN")
     if chrome_path:
         opts.binary_location = chrome_path
-    driver = webdriver.Chrome(options=opts)      # Selenium Manager เลือก driver ให้เอง
+    driver = webdriver.Chrome(options=opts)  # Selenium Manager จะจัดการ chromedriver ให้เอง
     driver.set_page_load_timeout(PAGE_LOAD_TIMEOUT)
     return driver
 
 def close_popup_if_any(driver):
     try:
-        time.sleep(0.8)
-        for sel in ['#btnWarning', '.modal [data-bs-dismiss="modal"]', '.modal .btn-close', '.swal2-confirm']:
+        time.sleep(0.6)
+        sels = ['#btnWarning', '.modal [data-bs-dismiss="modal"]', '.modal .btn-close', '.swal2-confirm']
+        for sel in sels:
             for el in driver.find_elements(By.CSS_SELECTOR, sel):
                 try:
                     if el.is_displayed() and el.is_enabled():
-                        el.click(); time.sleep(0.4)
-                except: pass
-    except: pass
+                        el.click(); time.sleep(0.3)
+                except Exception:
+                    pass
+    except Exception:
+        pass
+
+def safe_open_link(driver, el):
+    """พยายามเปิดลิงก์แม้มี overlay"""
+    href = None
+    try:
+        href = el.get_attribute("href")
+    except StaleElementReferenceException:
+        pass
+    if href:
+        driver.get(urljoin(BASE, href))
+        return True
+    try:
+        driver.execute_script("arguments[0].scrollIntoView({block:'center'});", el)
+        time.sleep(0.15)
+        el.click()
+        return True
+    except ElementClickInterceptedException:
+        try:
+            driver.execute_script("arguments[0].click();", el)
+            return True
+        except Exception:
+            return False
+    except Exception:
+        return False
 
 def go_home_and_search(driver, tax_id: str):
-    driver.get("https://datawarehouse.dbd.go.th/index")
+    driver.get(f"{BASE}/index")
     wait = WebDriverWait(driver, 40)
     close_popup_if_any(driver)
     sb = wait.until(EC.visibility_of_element_located((By.CSS_SELECTOR, "input#key-word.form-control")))
     sb.clear(); sb.send_keys(tax_id); time.sleep(0.2); sb.send_keys(Keys.ENTER)
+
+    # ถ้าเข้าหน้าโปรไฟล์ได้เลย
     try:
         wait.until(EC.presence_of_element_located((By.XPATH, "//h4[contains(.,'เลขทะเบียนนิติบุคคล')]")))
         return
     except TimeoutException:
         pass
-    for txt in ["รายละเอียด", "ดูรายละเอียด", "ข้อมูลนิติบุคคล"]:
-        links = driver.find_elements(By.XPATH, f"//a[contains(.,'{txt}')]")
+
+    # หน้า list → คลิกรายละเอียด
+    for label in ["รายละเอียด", "ดูรายละเอียด", "ข้อมูลนิติบุคคล"]:
+        links = driver.find_elements(By.XPATH, f"//a[contains(.,'{label}')]")
         if links:
-            links[0].click()
-            break
+            close_popup_if_any(driver)
+            if safe_open_link(driver, links[0]):
+                return
+            # fallback: ใช้ href โดยตรง
+            try:
+                href = links[0].get_attribute("href")
+                if href:
+                    driver.get(urljoin(BASE, href))
+                    return
+            except Exception:
+                pass
 
 def wait_profile_loaded(driver):
     wait = WebDriverWait(driver, 40)
     wait.until(EC.presence_of_element_located((By.XPATH, "//h4[contains(.,'เลขทะเบียนนิติบุคคล')]")))
-    time.sleep(0.8)
+    time.sleep(0.6)
 
+# ---------------- Parsing ----------------
 def extract_text_after_label(soup: BeautifulSoup, label: str) -> str:
     label_div = soup.find(lambda t: t.name == "div" and t.get_text(strip=True) == label)
     if not label_div: return ""
@@ -128,17 +174,24 @@ def parse_profile_html(html: str):
     }
 
 def scrape_one_id(driver, tax_id: str):
-    go_home_and_search(driver, tax_id)
-    wait_profile_loaded(driver)
+    for attempt in range(2):
+        go_home_and_search(driver, tax_id)
+        try:
+            wait_profile_loaded(driver)
+            break
+        except TimeoutException:
+            if attempt == 1: raise
+            time.sleep(1.2)
+
     try:
         WebDriverWait(driver, 12).until(EC.presence_of_element_located((By.CSS_SELECTOR, ".tab1")))
         html = driver.find_element(By.CSS_SELECTOR, ".tab1").get_attribute("innerHTML") or driver.page_source
-    except:
+    except Exception:
         html = driver.page_source
     data = parse_profile_html(html)
     return None if not data.get("เลขทะเบียน") or data["เลขทะเบียน"] in ("-","") else data
 
-# ===== Helpers =====
+# ---------------- Data / Sheets helpers ----------------
 HEADERS = [
     "tax_id","ชื่อ","เลขทะเบียน","สถานะ","วันที่จดทะเบียน","ทุนจดทะเบียน",
     "กลุ่มธุรกิจ","ขนาดธุรกิจ","ที่ตั้งสำนักงานใหญ่","กรรมการ",
@@ -148,25 +201,25 @@ HEADERS = [
 
 def read_tax_ids(path: str):
     ids = []
-    if not path or not os.path.exists(path): return ids
-    with open(path, "r", encoding="utf-8") as f:
-        for line in f:
-            line = line.split("#", 1)[0].strip()
-            if not line: continue
-            m = re.search(r"\b\d{13}\b", line)
-            if m: ids.append(m.group(0))
+    if path and os.path.exists(path):
+        with open(path, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.split("#", 1)[0].strip()
+                if not line: continue
+                m = re.search(r"\b\d{13}\b", line)
+                if m: ids.append(m.group(0))
+    # unique & keep order
     seen=set(); out=[]
     for x in ids:
         if x not in seen: seen.add(x); out.append(x)
     return out
 
-# ===== Google Sheets =====
 def open_sheet():
     creds_json = os.getenv("GOOGLE_CREDENTIALS_JSON")
     if not creds_json:
-        raise RuntimeError("GOOGLE_CREDENTIALS_JSON is empty. Add repository secret.")
+        raise RuntimeError("GOOGLE_CREDENTIALS_JSON is empty.")
     info = json.loads(creds_json)
-    scopes = ["https://www.googleapis.com/auth/spreadsheets","https://www.googleapis.com/auth/drive"]
+    scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
     creds = Credentials.from_service_account_info(info, scopes=scopes)
     gc = gspread.authorize(creds)
     sheet_id = os.getenv("SHEET_ID")
@@ -182,29 +235,36 @@ def open_sheet():
     return ws
 
 def upsert_row(ws, row_dict):
-    # key = tax_id
     tax_id = row_dict["tax_id"]
-    # หา index คอลัมน์ tax_id
-    headers = HEADERS
-    col_idx = headers.index("tax_id") + 1
-    col_vals = ws.col_values(col_idx)
+    col_vals = ws.col_values(1)  # A = tax_id
     row_index = None
-    for i, v in enumerate(col_vals[1:], start=2):  # ข้ามหัวตาราง
+    for i, v in enumerate(col_vals[1:], start=2):
         if v == tax_id:
-            row_index = i
-            break
-    values = [row_dict.get(h, "") for h in headers]
+            row_index = i; break
+    values = [row_dict.get(h, "") for h in HEADERS]
     if row_index:
         ws.update(f"A{row_index}", [values])
     else:
         ws.append_row(values, value_input_option="USER_ENTERED")
 
-# ===== Main =====
+def existing_tax_ids_from_sheet(ws):
+    col = ws.col_values(1)
+    return set(col[1:])
+
+def existing_tax_ids_from_json(out_dir):
+    if not os.path.isdir(out_dir): return set()
+    return {fn[:-5] for fn in os.listdir(out_dir) if fn.endswith(".json")}
+
+# ---------------- Main ----------------
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--tax-id", default=os.getenv("TAX_ID", "0135563016845"))
     ap.add_argument("--list-file", default="tax_ids.txt")
     ap.add_argument("--out-dir", default="data")
+    ap.add_argument("--limit", type=int, default=50, help="จำนวนต่อรอบ (0=ทั้งหมด)")
+    ap.add_argument("--offset", type=int, default=0, help="ข้ามกี่รายการแรก")
+    ap.add_argument("--skip-existing", choices=["none","sheet","json","both"], default="sheet",
+                    help="ข้ามเลขที่มีอยู่แล้วใน sheet/json")
     args = ap.parse_args()
 
     ids = read_tax_ids(args.list_file)
@@ -213,32 +273,58 @@ def main():
         if not re.fullmatch(r"\d{13}", t):
             print("❌ ใส่เลขผู้เสียภาษี 13 หลักให้ถูกต้อง"); return
         ids = [t]
+    else:
+        start = max(args.offset, 0)
+        end = (start + args.limit) if args.limit and args.limit > 0 else None
+        ids = ids[start:end]
 
     os.makedirs(args.out_dir, exist_ok=True)
     ws = open_sheet()
 
+    # filter skip-existing
+    existing = set()
+    if args.skip_existing in ("sheet","both"):
+        existing |= existing_tax_ids_from_sheet(ws)
+    if args.skip_existing in ("json","both"):
+        existing |= existing_tax_ids_from_json(args.out_dir)
+    if existing:
+        before = len(ids)
+        ids = [t for t in ids if t not in existing]
+        print(f"ข้ามที่มีอยู่แล้ว {before - len(ids)} รายการ → จะประมวลผล {len(ids)}")
+
     driver = build_driver()
     try:
+        total = len(ids)
         for i, tax_id in enumerate(ids, start=1):
-            print(f"\n🔎 [{i}/{len(ids)}] ค้นหาเลขภาษี: {tax_id}")
-            data = scrape_one_id(driver, tax_id)
+            print(f"\n🔎 [{i}/{total}] ค้นหาเลขภาษี: {tax_id}")
+            try:
+                data = scrape_one_id(driver, tax_id)
+            except Exception as e:
+                print(f"❌ error: {e}")
+                time.sleep(1.0)
+                continue
+
             if not data:
                 print("⚠️  ไม่พบข้อมูล/อ่านไม่สำเร็จ")
-                continue
-            # enrich + save file
-            row = {"tax_id": tax_id, **data, "fetched_at_utc": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")}
-            print("✅ พบข้อมูล:"); print(json.dumps(row, ensure_ascii=False, indent=2))
-            fp = os.path.join(args.out_dir, f"{tax_id}.json")
-            with open(fp, "w", encoding="utf-8") as f:
-                json.dump(row, f, ensure_ascii=False, indent=2)
-            print(f"💾 saved: {fp}")
-            # upsert to Google Sheets
-            upsert_row(ws, row)
-            print("⬆️  updated Google Sheets")
-            time.sleep(random.uniform(1.0, 2.0))
+            else:
+                row = {
+                    "tax_id": tax_id,
+                    **data,
+                    "fetched_at_utc": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+                }
+                # write json
+                fp = os.path.join(args.out_dir, f"{tax_id}.json")
+                with open(fp, "w", encoding="utf-8") as f:
+                    json.dump(row, f, ensure_ascii=False, indent=2)
+                print(f"💾 saved: {fp}")
+                # upsert sheet
+                upsert_row(ws, row)
+                print("⬆️  updated Google Sheets")
+
+            time.sleep(random.uniform(1.0, 2.0))  # gentle throttle
     finally:
         try: driver.quit()
-        except: pass
+        except Exception: pass
 
 if __name__ == "__main__":
     time.sleep(random.uniform(1.2, 2.5))
