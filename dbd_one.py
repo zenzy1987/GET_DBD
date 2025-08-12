@@ -22,7 +22,13 @@ from google.oauth2.service_account import Credentials
 PAGE_LOAD_TIMEOUT = 90
 BASE = "https://datawarehouse.dbd.go.th"
 
-# ---------- Selenium helpers ----------
+# ========== Utils ==========
+def canon_tax_id(x: str) -> str:
+    """ทำเลขผู้เสียภาษีให้เป็นรูปแบบมาตรฐาน: เก็บเฉพาะตัวเลขและเติม 0 ซ้ายให้ครบ 13 หลัก"""
+    t = re.sub(r"\D", "", str(x or ""))
+    return t.zfill(13) if t else ""
+
+# ========== Selenium helpers ==========
 def build_driver():
     opts = Options()
     opts.add_argument("--headless=new")
@@ -35,7 +41,7 @@ def build_driver():
     chrome_path = os.getenv("CHROME_PATH") or os.getenv("GOOGLE_CHROME_BIN")
     if chrome_path:
         opts.binary_location = chrome_path
-    driver = webdriver.Chrome(options=opts)  # Selenium Manager เลือก chromedriver ให้เอง
+    driver = webdriver.Chrome(options=opts)  # Selenium Manager จะจัดการ chromedriver ให้เอง
     driver.set_page_load_timeout(PAGE_LOAD_TIMEOUT)
     return driver
 
@@ -111,7 +117,7 @@ def wait_profile_loaded(driver):
     wait.until(EC.presence_of_element_located((By.XPATH, "//h4[contains(.,'เลขทะเบียนนิติบุคคล')]")))
     time.sleep(0.6)
 
-# ---------- Parsing ----------
+# ========== Parsing ==========
 def extract_text_after_label(soup: BeautifulSoup, label: str) -> str:
     label_div = soup.find(lambda t: t.name == "div" and t.get_text(strip=True) == label)
     if not label_div: return ""
@@ -190,7 +196,7 @@ def scrape_one_id(driver, tax_id: str):
     data = parse_profile_html(html)
     return None if not data.get("เลขทะเบียน") or data["เลขทะเบียน"] in ("-","") else data
 
-# ---------- Data / Sheets helpers ----------
+# ========== Data / Sheets helpers ==========
 HEADERS = [
     "tax_id","ชื่อ","เลขทะเบียน","สถานะ","วันที่จดทะเบียน","ทุนจดทะเบียน",
     "กลุ่มธุรกิจ","ขนาดธุรกิจ","ที่ตั้งสำนักงานใหญ่","กรรมการ",
@@ -204,12 +210,15 @@ def read_tax_ids(path: str):
         with open(path, "r", encoding="utf-8") as f:
             for line in f:
                 line = line.split("#", 1)[0].strip()
-                if not line: continue
-                m = re.search(r"\b\d{13}\b", line)
-                if m: ids.append(m.group(0))
+                if not line: 
+                    continue
+                m = re.search(r"\d{12,13}", line)  # ยอม 12–13 หลักแล้ว normalize ต่อ
+                if m:
+                    ids.append(canon_tax_id(m.group(0)))
+    # unique (keep order)
     seen=set(); out=[]
     for x in ids:
-        if x not in seen: seen.add(x); out.append(x)
+        if x and x not in seen: seen.add(x); out.append(x)
     return out
 
 def open_sheet():
@@ -231,28 +240,33 @@ def open_sheet():
         ws.update("A1", [HEADERS])
     return ws
 
-def upsert_row(ws, row_dict):
-    tax_id = row_dict["tax_id"]
-    col_vals = ws.col_values(1)
-    row_index = None
-    for i, v in enumerate(col_vals[1:], start=2):
-        if v == tax_id:
-            row_index = i; break
-    values = [row_dict.get(h, "") for h in HEADERS]
-    if row_index:
-        ws.update(f"A{row_index}", [values])
-    else:
-        ws.append_row(values, value_input_option="USER_ENTERED")
-
 def existing_tax_ids_from_sheet(ws):
     col = ws.col_values(1)
-    return set(col[1:])
+    return {canon_tax_id(v) for v in col[1:] if v}
 
 def existing_tax_ids_from_json(out_dir):
     if not os.path.isdir(out_dir): return set()
-    return {fn[:-5] for fn in os.listdir(out_dir) if fn.endswith(".json")}
+    return {canon_tax_id(fn[:-5]) for fn in os.listdir(out_dir) if fn.endswith(".json")}
 
-# ---------- Main ----------
+def upsert_row(ws, row_dict):
+    """อัปเดตแถวถ้ามีอยู่แล้ว (เทียบด้วย tax_id แบบ canonical) ไม่งั้น append แถวใหม่"""
+    tax_id = canon_tax_id(row_dict["tax_id"])
+    col_vals = ws.col_values(1)  # รวม header
+    row_index = None
+    for i, v in enumerate(col_vals[1:], start=2):
+        if canon_tax_id(v) == tax_id:
+            row_index = i; break
+
+    values = [row_dict.get(h, "") for h in HEADERS]
+    # เขียน tax_id เป็น "ข้อความ" กันศูนย์นำหน้าหาย
+    values[0] = f"'{tax_id}"
+
+    if row_index:
+        ws.update(f"A{row_index}", [values], value_input_option="RAW")
+    else:
+        ws.append_row(values, value_input_option="RAW")
+
+# ========== Main ==========
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--tax-id", default=os.getenv("TAX_ID", "0135563016845"))
@@ -266,7 +280,7 @@ def main():
 
     ids_all = read_tax_ids(args.list_file)
     if not ids_all:
-        t = re.sub(r"\D","", args.tax_id)
+        t = canon_tax_id(args.tax_id)
         if not re.fullmatch(r"\d{13}", t):
             print("❌ ใส่เลขผู้เสียภาษี 13 หลักให้ถูกต้อง"); return
         ids_all = [t]
@@ -274,14 +288,14 @@ def main():
     os.makedirs(args.out_dir, exist_ok=True)
     ws = open_sheet()
 
-    # กรองที่ทำแล้วก่อน → slice ตาม limit/offset
+    # กรองรายการที่ทำแล้วก่อน → slice ตาม limit/offset
     done = set()
     if args.skip_existing in ("sheet","both"):
         done |= existing_tax_ids_from_sheet(ws)
     if args.skip_existing in ("json","both"):
         done |= existing_tax_ids_from_json(args.out_dir)
 
-    remaining = [t for t in ids_all if t not in done]
+    remaining = [t for t in (canon_tax_id(x) for x in ids_all) if t not in done]
     start = max(args.offset, 0)
     end = (start + args.limit) if args.limit and args.limit > 0 else None
     ids = remaining[start:end]
@@ -302,12 +316,13 @@ def main():
             if not data:
                 print("⚠️  ไม่พบข้อมูล/อ่านไม่สำเร็จ")
             else:
+                canon = canon_tax_id(tax_id)
                 row = {
-                    "tax_id": tax_id,
+                    "tax_id": canon,
                     **data,
                     "fetched_at_utc": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
                 }
-                fp = os.path.join(args.out_dir, f"{tax_id}.json")
+                fp = os.path.join(args.out_dir, f"{canon}.json")
                 with open(fp, "w", encoding="utf-8") as f:
                     json.dump(row, f, ensure_ascii=False, indent=2)
                 print(f"💾 saved: {fp}")
