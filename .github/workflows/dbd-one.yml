@@ -12,7 +12,7 @@ on:
       limit:
         description: "จำนวนต่อรอบ (0=ทั้งหมด)"
         required: false
-        default: "50"
+        default: "40"
       offset:
         description: "ข้ามรายการแรกกี่อัน (ปกติ 0)"
         required: false
