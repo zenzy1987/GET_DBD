@@ -58,14 +58,13 @@ jobs:
           GOOGLE_CREDENTIALS_JSON: ${{ secrets.GOOGLE_CREDENTIALS_JSON }}
           SHEET_ID: ${{ vars.SHEET_ID }}
 
-          # inputs จาก workflow_dispatch (ถ้ารันจาก schedule จะว่าง)
-          INPUT_TAX_ID:     ${{ inputs.tax_id }}
-          INPUT_LIMIT:      ${{ inputs.limit }}
-          INPUT_OFFSET:     ${{ inputs.offset }}
-          INPUT_SKIP:       ${{ inputs.skip_existing }}
+          INPUT_TAX_ID:  ${{ inputs.tax_id }}
+          INPUT_LIMIT:   ${{ inputs.limit }}
+          INPUT_OFFSET:  ${{ inputs.offset }}
+          INPUT_SKIP:    ${{ inputs.skip_existing }}
         run: |
           set -e
-          LIMIT="${INPUT_LIMIT:-50}"
+          LIMIT="${INPUT_LIMIT:-40}"
           OFFSET="${INPUT_OFFSET:-0}"
           SKIP="${INPUT_SKIP:-sheet}"
 
@@ -93,4 +92,4 @@ jobs:
         with:
           name: dbd-json
           path: data/*.json
-          if-no-files-found: ignore
+          if-no-files-found: ignore   # ถ้าไม่มีไฟล์ให้ข้าม ไม่ต้อง error
