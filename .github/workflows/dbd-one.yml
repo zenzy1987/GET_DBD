@@ -22,7 +22,7 @@ on:
         required: false
         default: "sheet"
   schedule:
-    - cron: "*/10 * * * *"   # ทุก 10 นาที
+    - cron: "*/15 * * * *"   # ทุก 15 นาที
 
 concurrency:
   group: dbd-one
