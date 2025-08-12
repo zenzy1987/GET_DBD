@@ -258,7 +258,7 @@ def main():
     ap.add_argument("--tax-id", default=os.getenv("TAX_ID", "0135563016845"))
     ap.add_argument("--list-file", default="tax_ids.txt")
     ap.add_argument("--out-dir", default="data")
-    ap.add_argument("--limit", type=int, default=50, help="จำนวนต่อรอบ (0=ทั้งหมด)")
+    ap.add_argument("--limit", type=int, default=40, help="จำนวนต่อรอบ (0=ทั้งหมด)")
     ap.add_argument("--offset", type=int, default=0, help="ข้ามกี่รายการแรก (ปกติปล่อย 0 เมื่อใช้ skip)")
     ap.add_argument("--skip-existing", choices=["none","sheet","json","both"], default="sheet",
                     help="ข้ามเลขที่มีอยู่แล้วใน sheet/json")
