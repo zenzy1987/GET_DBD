@@ -49,10 +49,28 @@ jobs:
       - name: Remove stale chromedriver in PATH
         run: sudo rm -f /usr/bin/chromedriver || true
 
-      - name: Install deps
+      # >>> สำคัญ: ติดตั้งไลบรารีที่โค้ดใช้แน่นอน รวมถึง google-api-python-client
+      - name: Install dependencies
         run: |
-          python -m pip install -U pip
-          pip install -r requirements.txt
+          python -m pip install -U pip wheel setuptools
+          if [ -f requirements.txt ]; then
+            pip install -r requirements.txt
+          fi
+          # ensure มีของจำเป็น แม้ใน requirements.txt จะขาด
+          pip install --upgrade \
+            gspread google-auth google-auth-oauthlib google-api-python-client \
+            beautifulsoup4 selenium
+
+      # ตรวจสอบว่า import ได้จริงก่อนรัน
+      - name: Sanity check imports
+        run: |
+          python - <<'PY'
+          import gspread
+          from googleapiclient.errors import HttpError
+          from bs4 import BeautifulSoup
+          import selenium
+          print("✅ imports ok")
+          PY
 
       - name: Run DBD batch → Google Sheets
         env:
@@ -60,7 +78,6 @@ jobs:
           CHROME_BIN:  ${{ steps.chrome.outputs.chrome-path }}
           GOOGLE_CREDENTIALS_JSON: ${{ secrets.GOOGLE_CREDENTIALS_JSON }}
           SHEET_ID: ${{ vars.SHEET_ID }}
-
           # ใช้ได้ทั้ง schedule และ workflow_dispatch
           INPUT_TAX_ID:  ${{ github.event_name == 'workflow_dispatch' && inputs.tax_id || '' }}
           INPUT_LIMIT:   ${{ github.event_name == 'workflow_dispatch' && inputs.limit || '' }}
