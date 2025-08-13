@@ -18,16 +18,18 @@ on:
         description: "none/sheet/json/both (แนะนำ: sheet)"
         required: false
         default: "sheet"
+      batch_size:
+        description: "จำนวนแถวต่อการเขียนลงชีท 1 ครั้ง (batch)"
+        required: false
+        default: "50"
   schedule:
     - cron: "*/15 * * * *"   # รันทุก 15 นาที (UTC)
 
-# อนุญาตให้หลาย job ใน repo นี้รันพร้อมกันได้
 concurrency:
   group: dbd-one-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
-  # 1) เตรียม chunks จาก tax_ids.txt
   prep:
     runs-on: ubuntu-latest
     outputs:
@@ -35,24 +37,28 @@ jobs:
       lines_per_chunk: ${{ steps.vars.outputs.lines }}
       limit: ${{ steps.vars.outputs.limit }}
       skip: ${{ steps.vars.outputs.skip }}
+      batch: ${{ steps.vars.outputs.batch }}
     steps:
       - uses: actions/checkout@v4
 
+      - name: Ensure jq
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y jq
+
       - id: vars
         run: |
-          # ค่าจาก dispatch ถ้าไม่มีให้ตั้งค่า default
           echo "lines=${{ github.event.inputs.lines_per_chunk || '50' }}" >> $GITHUB_OUTPUT
           echo "limit=${{ github.event.inputs.limit || '0' }}" >> $GITHUB_OUTPUT
           echo "skip=${{ github.event.inputs.skip_existing || 'sheet' }}" >> $GITHUB_OUTPUT
+          echo "batch=${{ github.event.inputs.batch_size || '50' }}" >> $GITHUB_OUTPUT
 
       - name: Split tax_ids.txt into chunks
         run: |
           set -euo pipefail
           LINES="${{ steps.vars.outputs.lines }}"
           mkdir -p chunks
-          # ถ้าไฟล์ไม่มี ให้สร้างเปล่า ๆ (ป้องกัน fail)
           touch tax_ids.txt
-          # split ตามจำนวนบรรทัด/ชิ้น (เก็บคอมเมนต์/บรรทัดว่างไว้ได้ โค้ด python จะกรองเอง)
           split -l "$LINES" -d -a 3 tax_ids.txt chunks/chunk_
           ls -l chunks || true
 
@@ -60,14 +66,11 @@ jobs:
         name: Build matrix from chunks
         run: |
           set -euo pipefail
-          # สร้าง list เป็น JSON สำหรับ strategy.matrix
-          # ถ้าไม่มีไฟล์เลย ให้ใส่ไฟล์ dummy เพื่อให้ job ต่อไปขึ้นมาอย่างน้อย 1 ตัว
           files=$(ls -1 chunks/chunk_* 2>/dev/null || true)
           if [ -z "$files" ]; then
             echo "" > chunks/chunk_000
             files="chunks/chunk_000"
           fi
-          # แปลงเป็น JSON array
           MATRIX=$(printf "%s\n" $files | jq -R -s -c 'split("\n")[:-1]')
           echo "matrix=$MATRIX" >> $GITHUB_OUTPUT
           echo "matrix=$MATRIX"
@@ -78,7 +81,6 @@ jobs:
           name: taxid-chunks
           path: chunks/*
 
-  # 2) รันแต่ละ chunk ขนานกัน
   run-chunks:
     needs: prep
     runs-on: ubuntu-latest
@@ -110,15 +112,13 @@ jobs:
           if [ -f requirements.txt ]; then
             pip install -r requirements.txt
           fi
-          pip install --upgrade \
-            gspread google-auth google-auth-oauthlib google-api-python-client \
-            beautifulsoup4 selenium
+          # ต้องมีตามโค้ดใหม่ (ไม่ต้องใช้ googleapiclient)
+          pip install --upgrade gspread google-auth beautifulsoup4 selenium
 
       - name: Sanity check imports
         run: |
           python - <<'PY'
           import gspread
-          from googleapiclient.errors import HttpError
           from bs4 import BeautifulSoup
           import selenium
           print("✅ imports ok")
@@ -142,16 +142,15 @@ jobs:
           CHUNK="${{ matrix.chunk }}"
           LIMIT="${{ needs.prep.outputs.limit }}"
           SKIP="${{ needs.prep.outputs.skip }}"
+          BATCH="${{ needs.prep.outputs.batch }}"
 
-          echo "▶ Running chunk: $CHUNK  limit=$LIMIT  skip=$SKIP"
+          echo "▶ Running chunk: $CHUNK  limit=$LIMIT  skip=$SKIP  batch=$BATCH"
 
-          # heartbeat ทุก 60 วิ
           ( while true; do echo "⏱ $(date -u +%H:%M:%SZ) still running (chunk $CHUNK)..."; sleep 60; done ) &
           HB=$!
 
-          ARGS=( --list-file "$CHUNK" --limit "$LIMIT" --offset "0" --skip-existing "$SKIP" )
+          ARGS=( --list-file "$CHUNK" --limit "$LIMIT" --offset "0" --skip-existing "$SKIP" --batch-size "$BATCH" )
 
-          # จำกัดเวลารัน python ต่อชิ้นไม่ให้ชน timeout job
           timeout 22m python -u dbd_one.py "${ARGS[@]}" | tee "result_${{ strategy.job-index }}.txt"
           RC=${PIPESTATUS[0]}
           kill "$HB" || true
