@@ -28,6 +28,26 @@ def canon_tax_id(x: str) -> str:
     t = re.sub(r"\D", "", str(x or ""))
     return t.zfill(13) if t else ""
 
+def remove_id_from_txt(path: str, tax_id: str):
+    """ลบ tax_id (canonical) ออกจากไฟล์ path แบบปลอดภัย"""
+    target = canon_tax_id(tax_id)
+    if not os.path.exists(path): 
+        return
+    tmp = path + ".tmp"
+    with open(path, "r", encoding="utf-8") as src, open(tmp, "w", encoding="utf-8") as dst:
+        for line in src:
+            raw = line.split("#", 1)[0].strip()
+            if not raw:
+                continue
+            cur = canon_tax_id(re.sub(r"\D", "", raw))
+            if cur != target:
+                dst.write(line)
+    os.replace(tmp, path)
+
+def append_log(log_path: str, text: str):
+    with open(log_path, "a", encoding="utf-8") as f:
+        f.write(text + "\n")
+
 # ========== Selenium helpers ==========
 def build_driver():
     opts = Options()
@@ -185,7 +205,9 @@ def scrape_one_id(driver, tax_id: str):
             wait_profile_loaded(driver)
             break
         except TimeoutException:
-            if attempt == 1: raise
+            if attempt == 1: 
+                # มองว่า "ไม่พบ" (ตามนิยามคุณ) → ส่งสัญญาณ None ให้ส่วน main จัดการลบออก
+                return None
             time.sleep(1.2)
 
     try:
@@ -194,6 +216,7 @@ def scrape_one_id(driver, tax_id: str):
     except Exception:
         html = driver.page_source
     data = parse_profile_html(html)
+    # ถ้าเลขทะเบียนไม่เจอ ให้ถือว่า "ไม่พบข้อมูล"
     return None if not data.get("เลขทะเบียน") or data["เลขทะเบียน"] in ("-","") else data
 
 # ========== Data / Sheets helpers ==========
@@ -215,7 +238,7 @@ def read_tax_ids(path: str):
                 m = re.search(r"\d{12,13}", line)  # ยอม 12–13 หลักแล้ว normalize ต่อ
                 if m:
                     ids.append(canon_tax_id(m.group(0)))
-    # unique (keep order)
+    # unique (keep order) — ทำครั้งเดียวตอนเริ่มใช้งานพอ; ไม่ต้องทำซ้ำทุกครั้งก็ได้
     seen=set(); out=[]
     for x in ids:
         if x and x not in seen: seen.add(x); out.append(x)
@@ -272,10 +295,11 @@ def main():
     ap.add_argument("--tax-id", default=os.getenv("TAX_ID", "0135563016845"))
     ap.add_argument("--list-file", default="tax_ids.txt")
     ap.add_argument("--out-dir", default="data")
-    ap.add_argument("--limit", type=int, default=40, help="จำนวนต่อรอบ (0=ทั้งหมด)")
-    ap.add_argument("--offset", type=int, default=0, help="ข้ามกี่รายการแรก (ปกติปล่อย 0 เมื่อใช้ skip)")
+    ap.add_argument("--limit", type=int, default=20, help="จำนวนต่อรอบ (0=ทั้งหมด)")  # ★ เปลี่ยน default = 20
+    ap.add_argument("--offset", type=int, default=0, help="ข้ามกี่รายการแรก (ไม่จำเป็นเมื่อใช้ลบออกจากไฟล์)")
     ap.add_argument("--skip-existing", choices=["none","sheet","json","both"], default="sheet",
-                    help="ข้ามเลขที่มีอยู่แล้วใน sheet/json")
+                    help="ข้ามเลขที่มีอยู่แล้วใน sheet/json (เฉพาะเคส FOUND)")
+    ap.add_argument("--logs-dir", default=".", help="โฟลเดอร์เก็บไฟล์ log")
     args = ap.parse_args()
 
     ids_all = read_tax_ids(args.list_file)
@@ -286,20 +310,23 @@ def main():
         ids_all = [t]
 
     os.makedirs(args.out_dir, exist_ok=True)
+    os.makedirs(args.logs_dir, exist_ok=True)
     ws = open_sheet()
 
-    # กรองรายการที่ทำแล้วก่อน → slice ตาม limit/offset
-    done = set()
+    # กรองเฉพาะเคส FOUND ที่ทำแล้ว (ไม่ต้องไปซ้ำ)
+    done_found = set()
     if args.skip_existing in ("sheet","both"):
-        done |= existing_tax_ids_from_sheet(ws)
+        done_found |= existing_tax_ids_from_sheet(ws)
     if args.skip_existing in ("json","both"):
-        done |= existing_tax_ids_from_json(args.out_dir)
+        done_found |= existing_tax_ids_from_json(args.out_dir)
 
-    remaining = [t for t in (canon_tax_id(x) for x in ids_all) if t not in done]
-    start = max(args.offset, 0)
-    end = (start + args.limit) if args.limit and args.limit > 0 else None
-    ids = remaining[start:end]
-    print(f"เหลือในคิว {len(remaining)} รายการ → รอบนี้จะทำ {len(ids)} รายการ")
+    remaining = [t for t in (canon_tax_id(x) for x in ids_all) if t not in done_found]
+
+    # จัด batch ตาม limit (ถ้า limit=0 → ทำทั้งหมด)
+    end = (args.limit if args.limit and args.limit > 0 else None)
+    ids = remaining[:end]
+
+    print(f"เหลือในคิว (หลังกรอง FOUND เดิม) {len(remaining)} รายการ → รอบนี้จะทำ {len(ids)} รายการ")
 
     driver = build_driver()
     try:
@@ -309,13 +336,19 @@ def main():
             try:
                 data = scrape_one_id(driver, tax_id)
             except Exception as e:
-                print(f"❌ error: {e}")
+                # ล้มเหลวจริง → log และ "ไม่ลบ" ออกจากไฟล์
+                print(f"❌ FAIL: {tax_id} error: {e}")
+                append_log(os.path.join(args.logs_dir, "fail_ids.txt"), tax_id)
                 time.sleep(1.0)
                 continue
 
             if not data:
-                print("⚠️  ไม่พบข้อมูล/อ่านไม่สำเร็จ")
+                # “ไม่พบข้อมูล” = สำเร็จตามนิยาม → log แล้วลบทันที
+                print("⚠️  NOT_FOUND → ถือว่าสำเร็จและจะลบออกจากไฟล์คิว")
+                append_log(os.path.join(args.logs_dir, "not_found_ids.txt"), tax_id)
+                remove_id_from_txt(args.list_file, tax_id)
             else:
+                # FOUND → save + upsert + ลบทันที
                 canon = canon_tax_id(tax_id)
                 row = {
                     "tax_id": canon,
@@ -328,6 +361,8 @@ def main():
                 print(f"💾 saved: {fp}")
                 upsert_row(ws, row)
                 print("⬆️  updated Google Sheets")
+                append_log(os.path.join(args.logs_dir, "found_ids.txt"), tax_id)
+                remove_id_from_txt(args.list_file, tax_id)
 
             time.sleep(random.uniform(1.0, 2.0))
     finally:
