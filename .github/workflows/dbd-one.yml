@@ -18,10 +18,6 @@ on:
         description: "none/sheet/json/both (แนะนำ: sheet)"
         required: false
         default: "sheet"
-      batch_size:
-        description: "จำนวนแถวต่อการเขียนลงชีท 1 ครั้ง (batch)"
-        required: false
-        default: "50"
   schedule:
     - cron: "*/15 * * * *"   # รันทุก 15 นาที (UTC)
 
@@ -37,7 +33,6 @@ jobs:
       lines_per_chunk: ${{ steps.vars.outputs.lines }}
       limit: ${{ steps.vars.outputs.limit }}
       skip: ${{ steps.vars.outputs.skip }}
-      batch: ${{ steps.vars.outputs.batch }}
     steps:
       - uses: actions/checkout@v4
 
@@ -51,7 +46,6 @@ jobs:
           echo "lines=${{ github.event.inputs.lines_per_chunk || '50' }}" >> $GITHUB_OUTPUT
           echo "limit=${{ github.event.inputs.limit || '0' }}" >> $GITHUB_OUTPUT
           echo "skip=${{ github.event.inputs.skip_existing || 'sheet' }}" >> $GITHUB_OUTPUT
-          echo "batch=${{ github.event.inputs.batch_size || '50' }}" >> $GITHUB_OUTPUT
 
       - name: Split tax_ids.txt into chunks
         run: |
@@ -112,7 +106,6 @@ jobs:
           if [ -f requirements.txt ]; then
             pip install -r requirements.txt
           fi
-          # ต้องมีตามโค้ดใหม่ (ไม่ต้องใช้ googleapiclient)
           pip install --upgrade gspread google-auth beautifulsoup4 selenium
 
       - name: Sanity check imports
@@ -130,7 +123,7 @@ jobs:
           name: taxid-chunks
           path: chunks
 
-      - name: Run DBD batch → Google Sheets (per-chunk)
+      - name: Run DBD → Google Sheets (per-chunk)
         env:
           CHROME_PATH: ${{ steps.chrome.outputs.chrome-path }}
           CHROME_BIN:  ${{ steps.chrome.outputs.chrome-path }}
@@ -142,14 +135,13 @@ jobs:
           CHUNK="${{ matrix.chunk }}"
           LIMIT="${{ needs.prep.outputs.limit }}"
           SKIP="${{ needs.prep.outputs.skip }}"
-          BATCH="${{ needs.prep.outputs.batch }}"
 
-          echo "▶ Running chunk: $CHUNK  limit=$LIMIT  skip=$SKIP  batch=$BATCH"
+          echo "▶ Running chunk: $CHUNK  limit=$LIMIT  skip=$SKIP"
 
           ( while true; do echo "⏱ $(date -u +%H:%M:%SZ) still running (chunk $CHUNK)..."; sleep 60; done ) &
           HB=$!
 
-          ARGS=( --list-file "$CHUNK" --limit "$LIMIT" --offset "0" --skip-existing "$SKIP" --batch-size "$BATCH" )
+          ARGS=( --list-file "$CHUNK" --limit "$LIMIT" --offset "0" --skip-existing "$SKIP" )
 
           timeout 22m python -u dbd_one.py "${ARGS[@]}" | tee "result_${{ strategy.job-index }}.txt"
           RC=${PIPESTATUS[0]}
