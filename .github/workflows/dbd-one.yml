@@ -22,7 +22,8 @@ on:
         required: false
         default: "sheet"
   schedule:
-    - cron: "*/15 * * * *"   # ทุก 15 นาที (UTC)
+    # ทุก 30 นาที (UTC) → เวลาจริงในไทย = UTC+7
+    - cron: "*/30 * * * *"
 
 concurrency:
   group: dbd-one-${{ github.ref }}
