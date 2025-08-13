@@ -6,83 +6,32 @@ permissions:
 on:
   workflow_dispatch:
     inputs:
-      lines_per_chunk:
-        description: "จำนวนบรรทัดต่อชิ้น (chunk) ใน tax_ids.txt"
+      tax_id:
+        description: "ถ้าว่างจะอ่านจาก tax_ids.txt"
         required: false
-        default: "50"
       limit:
-        description: "จำนวนต่อรอบที่ python จะประมวลผล (0=ทั้งหมดใน chunk)"
+        description: "จำนวนต่อรอบ (0=ทั้งหมด)"
+        required: false
+        default: "40"
+      offset:
+        description: "ข้ามรายการแรกกี่อัน (ปกติ 0)"
         required: false
         default: "0"
       skip_existing:
-        description: "none/sheet/json/both (แนะนำ: sheet)"
+        description: "none/sheet/json/both"
         required: false
         default: "sheet"
   schedule:
-    - cron: "*/15 * * * *"   # รันทุก 15 นาที (UTC)
+    - cron: "*/15 * * * *"   # ทุก 15 นาที (UTC)
 
 concurrency:
   group: dbd-one-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
-  prep:
-    runs-on: ubuntu-latest
-    outputs:
-      matrix: ${{ steps.make-matrix.outputs.matrix }}
-      lines_per_chunk: ${{ steps.vars.outputs.lines }}
-      limit: ${{ steps.vars.outputs.limit }}
-      skip: ${{ steps.vars.outputs.skip }}
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Ensure jq
-        run: |
-          sudo apt-get update -y
-          sudo apt-get install -y jq
-
-      - id: vars
-        run: |
-          echo "lines=${{ github.event.inputs.lines_per_chunk || '50' }}" >> $GITHUB_OUTPUT
-          echo "limit=${{ github.event.inputs.limit || '0' }}" >> $GITHUB_OUTPUT
-          echo "skip=${{ github.event.inputs.skip_existing || 'sheet' }}" >> $GITHUB_OUTPUT
-
-      - name: Split tax_ids.txt into chunks
-        run: |
-          set -euo pipefail
-          LINES="${{ steps.vars.outputs.lines }}"
-          mkdir -p chunks
-          touch tax_ids.txt
-          split -l "$LINES" -d -a 3 tax_ids.txt chunks/chunk_
-          ls -l chunks || true
-
-      - id: make-matrix
-        name: Build matrix from chunks
-        run: |
-          set -euo pipefail
-          files=$(ls -1 chunks/chunk_* 2>/dev/null || true)
-          if [ -z "$files" ]; then
-            echo "" > chunks/chunk_000
-            files="chunks/chunk_000"
-          fi
-          MATRIX=$(printf "%s\n" $files | jq -R -s -c 'split("\n")[:-1]')
-          echo "matrix=$MATRIX" >> $GITHUB_OUTPUT
-          echo "matrix=$MATRIX"
-
-      - name: Upload chunks (for debugging)
-        uses: actions/upload-artifact@v4
-        with:
-          name: taxid-chunks
-          path: chunks/*
-
-  run-chunks:
-    needs: prep
+  run:
     runs-on: ubuntu-latest
     timeout-minutes: 25
-    strategy:
-      fail-fast: false
-      matrix:
-        chunk: ${{ fromJSON(needs.prep.outputs.matrix) }}
 
     steps:
       - uses: actions/checkout@v4
@@ -100,61 +49,41 @@ jobs:
       - name: Remove stale chromedriver in PATH
         run: sudo rm -f /usr/bin/chromedriver || true
 
-      - name: Install dependencies
+      - name: Install deps
         run: |
-          python -m pip install -U pip wheel setuptools
-          if [ -f requirements.txt ]; then
-            pip install -r requirements.txt
-          fi
-          pip install --upgrade gspread google-auth beautifulsoup4 selenium
+          python -m pip install -U pip
+          pip install -r requirements.txt
 
-      - name: Sanity check imports
-        run: |
-          python - <<'PY'
-          import gspread
-          from bs4 import BeautifulSoup
-          import selenium
-          print("✅ imports ok")
-          PY
-
-      - name: Download chunk file from artifact (fallback)
-        uses: actions/download-artifact@v4
-        with:
-          name: taxid-chunks
-          path: chunks
-
-      - name: Run DBD → Google Sheets (per-chunk)
+      - name: Run DBD batch → Google Sheets
         env:
           CHROME_PATH: ${{ steps.chrome.outputs.chrome-path }}
           CHROME_BIN:  ${{ steps.chrome.outputs.chrome-path }}
           GOOGLE_CREDENTIALS_JSON: ${{ secrets.GOOGLE_CREDENTIALS_JSON }}
           SHEET_ID: ${{ vars.SHEET_ID }}
-          PYTHONUNBUFFERED: "1"
+
+          # ใช้ได้ทั้ง schedule และ workflow_dispatch
+          INPUT_TAX_ID:  ${{ github.event_name == 'workflow_dispatch' && inputs.tax_id || '' }}
+          INPUT_LIMIT:   ${{ github.event_name == 'workflow_dispatch' && inputs.limit || '' }}
+          INPUT_OFFSET:  ${{ github.event_name == 'workflow_dispatch' && inputs.offset || '' }}
+          INPUT_SKIP:    ${{ github.event_name == 'workflow_dispatch' && inputs.skip_existing || '' }}
         run: |
           set -euo pipefail
-          CHUNK="${{ matrix.chunk }}"
-          LIMIT="${{ needs.prep.outputs.limit }}"
-          SKIP="${{ needs.prep.outputs.skip }}"
+          LIMIT="${INPUT_LIMIT:-40}"
+          OFFSET="${INPUT_OFFSET:-0}"
+          SKIP="${INPUT_SKIP:-sheet}"
 
-          echo "▶ Running chunk: $CHUNK  limit=$LIMIT  skip=$SKIP"
+          ARGS=( --list-file tax_ids.txt --limit "$LIMIT" --offset "$OFFSET" --skip-existing "$SKIP" )
+          if [ -n "${INPUT_TAX_ID:-}" ]; then
+            ARGS+=( --tax-id "$INPUT_TAX_ID" )
+          fi
 
-          ( while true; do echo "⏱ $(date -u +%H:%M:%SZ) still running (chunk $CHUNK)..."; sleep 60; done ) &
-          HB=$!
-
-          ARGS=( --list-file "$CHUNK" --limit "$LIMIT" --offset "0" --skip-existing "$SKIP" )
-
-          timeout 22m python -u dbd_one.py "${ARGS[@]}" | tee "result_${{ strategy.job-index }}.txt"
-          RC=${PIPESTATUS[0]}
-          kill "$HB" || true
-
+          python dbd_one.py "${ARGS[@]}" | tee result.txt
           {
-            echo "### Chunk: $CHUNK (last 200 lines)"
-            tail -n 200 "result_${{ strategy.job-index }}.txt" || true
+            echo "## DBD Result (last 200 lines)";
+            tail -n 200 result.txt || true;
           } >> "$GITHUB_STEP_SUMMARY"
 
-          exit $RC
-
-      - name: Commit JSON results to repo (safe with retry)
+      - name: Commit JSON results to repo
         env:
           GH_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
           GH_NAME: github-actions[bot]
@@ -164,18 +93,9 @@ jobs:
           git config user.email "$GH_EMAIL"
           git add -A data || true
           if ! git diff --cached --quiet -- data; then
-            n=0
-            until [ $n -ge 5 ]; do
-              git commit -m "DBD batch ${GITHUB_RUN_ID} chunk:${{ matrix.chunk }}"
-              git pull --rebase --autostash origin "${{ github.ref_name }}" || true
-              if git push origin HEAD:"${{ github.ref_name }}"; then
-                echo "✅ pushed"
-                break
-              fi
-              echo "⏳ push failed; retrying..."
-              n=$((n+1))
-              sleep 3
-            done
+            git commit -m "DBD batch $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+            git pull --rebase origin "${{ github.ref_name }}" || true
+            git push origin HEAD:"${{ github.ref_name }}"
           else
             echo "Nothing to commit"
           fi
@@ -184,6 +104,6 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: dbd-json-${{ strategy.job-index }}
+          name: dbd-json
           path: data/*.json
           if-no-files-found: ignore
