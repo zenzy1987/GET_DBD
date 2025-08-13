@@ -18,6 +18,7 @@ from selenium.common.exceptions import (
 # Google Sheets
 import gspread
 from google.oauth2.service_account import Credentials
+from googleapiclient.errors import HttpError
 
 PAGE_LOAD_TIMEOUT = 90
 BASE = "https://datawarehouse.dbd.go.th"
@@ -27,6 +28,20 @@ def canon_tax_id(x: str) -> str:
     """ทำเลขผู้เสียภาษีให้เป็นรูปแบบมาตรฐาน: เก็บเฉพาะตัวเลขและเติม 0 ซ้ายให้ครบ 13 หลัก"""
     t = re.sub(r"\D", "", str(x or ""))
     return t.zfill(13) if t else ""
+
+def retry_backoff(fn, max_attempts=5, retriable_status=(429, 403)):
+    """รันฟังก์ชันที่เรียก Google API พร้อม backoff อัตโนมัติ"""
+    for attempt in range(max_attempts):
+        try:
+            return fn()
+        except HttpError as e:
+            code = getattr(e.resp, "status", None)
+            if code in retriable_status:
+                sleep_time = (2 ** attempt) + random.random()
+                print(f"⏳ quota/backoff (HTTP {code}) → sleep {sleep_time:.1f}s")
+                time.sleep(sleep_time)
+                continue
+            raise
 
 # ========== Selenium helpers ==========
 def build_driver():
@@ -210,7 +225,7 @@ def read_tax_ids(path: str):
         with open(path, "r", encoding="utf-8") as f:
             for line in f:
                 line = line.split("#", 1)[0].strip()
-                if not line: 
+                if not line:
                     continue
                 m = re.search(r"\d{12,13}", line)  # ยอม 12–13 หลักแล้ว normalize ต่อ
                 if m:
@@ -237,34 +252,73 @@ def open_sheet():
     first = ws.row_values(1)
     if first != HEADERS:
         ws.resize(1)
-        ws.update("A1", [HEADERS])
-    return ws
+        retry_backoff(lambda: ws.update("A1", [HEADERS]))
+    return sh, ws
 
-def existing_tax_ids_from_sheet(ws):
-    col = ws.col_values(1)
-    return {canon_tax_id(v) for v in col[1:] if v}
+def build_taxid_rowindex(ws):
+    """อ่านคอลัมน์ A ครั้งเดียวแล้วสร้าง map: tax_id → row_index"""
+    col = ws.col_values(1)  # รวม header
+    idx = {}
+    for i, v in enumerate(col[1:], start=2):
+        t = canon_tax_id(v)
+        if t:
+            idx[t] = i
+    return idx, len(col)  # last_row+1 สำหรับ append
 
-def existing_tax_ids_from_json(out_dir):
-    if not os.path.isdir(out_dir): return set()
-    return {canon_tax_id(fn[:-5]) for fn in os.listdir(out_dir) if fn.endswith(".json")}
+class SheetBuffer:
+    """
+    เก็บรายการที่จะ upsert เป็น batch:
+      - updates: รายการที่มีแถวอยู่แล้ว → ใช้ values_batch_update
+      - inserts: รายการใหม่ → ใช้ values_append ทีละก้อน
+    """
+    def __init__(self, sh, ws, row_index_map, batch_size=50):
+        self.sh = sh
+        self.ws = ws
+        self.title = ws.title
+        self.idx = row_index_map  # tax_id → row
+        self.batch_size = batch_size
+        self.updates = []  # list of dict: {'range': 'Sheet1!A5:O5', 'values': [[...]]}
+        self.inserts = []  # list of values rows (no range needed for append)
+        self.next_append_row = ws.row_count + 1  # ไม่ใช้จริง แต่เก็บไว้เผื่อ
 
-def upsert_row(ws, row_dict):
-    """อัปเดตแถวถ้ามีอยู่แล้ว (เทียบด้วย tax_id แบบ canonical) ไม่งั้น append แถวใหม่"""
-    tax_id = canon_tax_id(row_dict["tax_id"])
-    col_vals = ws.col_values(1)  # รวม header
-    row_index = None
-    for i, v in enumerate(col_vals[1:], start=2):
-        if canon_tax_id(v) == tax_id:
-            row_index = i; break
+    def add(self, row_dict):
+        tax_id = canon_tax_id(row_dict["tax_id"])
+        values = [row_dict.get(h, "") for h in HEADERS]
+        values[0] = f"'{tax_id}"  # กันศูนย์หาย
+        if tax_id in self.idx:
+            r = self.idx[tax_id]
+            a1 = f"{self.title}!A{r}:{chr(ord('A')+len(HEADERS)-1)}{r}"
+            self.updates.append({"range": a1, "values": [values]})
+        else:
+            self.inserts.append(values)
+        # flush อัตโนมัติเมื่อเกินก้อน
+        if len(self.updates) + len(self.inserts) >= self.batch_size:
+            self.flush()
 
-    values = [row_dict.get(h, "") for h in HEADERS]
-    # เขียน tax_id เป็น "ข้อความ" กันศูนย์นำหน้าหาย
-    values[0] = f"'{tax_id}"
+    def flush(self):
+        # 1) เขียนอัปเดตที่มี range (ทับแถวเดิม)
+        if self.updates:
+            data = [{"range": u["range"], "values": u["values"]} for u in self.updates]
+            def do_update():
+                return self.sh.values_batch_update(
+                    data=data,
+                    value_input_option="RAW"
+                )
+            retry_backoff(do_update)
+            self.updates.clear()
 
-    if row_index:
-        ws.update(f"A{row_index}", [values], value_input_option="RAW")
-    else:
-        ws.append_row(values, value_input_option="RAW")
+        # 2) append แถวใหม่เป็นก้อนเดียว
+        if self.inserts:
+            def do_append():
+                return self.sh.values_append(
+                    range=f"{self.title}!A1",
+                    params={"valueInputOption": "RAW", "insertDataOption": "INSERT_ROWS"},
+                    body={"values": self.inserts}
+                )
+            retry_backoff(do_append)
+            # อัปเดต index map สำหรับแถวใหม่ (ประมาณตำแหน่งปลายตาราง)
+            # เคสนี้ไม่รู้เลข row ที่แน่ชัดจนกว่าจะ re-scan; แต่พอสำหรับลด API calls แล้ว
+            self.inserts.clear()
 
 # ========== Main ==========
 def main():
@@ -276,6 +330,7 @@ def main():
     ap.add_argument("--offset", type=int, default=0, help="ข้ามกี่รายการแรก (ปกติปล่อย 0 เมื่อใช้ skip)")
     ap.add_argument("--skip-existing", choices=["none","sheet","json","both"], default="sheet",
                     help="ข้ามเลขที่มีอยู่แล้วใน sheet/json")
+    ap.add_argument("--batch-size", type=int, default=50, help="ขนาด batch ต่อการเขียน Sheets หนึ่งครั้ง")
     args = ap.parse_args()
 
     ids_all = read_tax_ids(args.list_file)
@@ -286,20 +341,29 @@ def main():
         ids_all = [t]
 
     os.makedirs(args.out_dir, exist_ok=True)
-    ws = open_sheet()
+    sh, ws = open_sheet()
 
     # กรองรายการที่ทำแล้วก่อน → slice ตาม limit/offset
     done = set()
     if args.skip_existing in ("sheet","both"):
-        done |= existing_tax_ids_from_sheet(ws)
+        idx_map, _ = build_taxid_rowindex(ws)
+        done |= set(idx_map.keys())
+    else:
+        idx_map, _ = build_taxid_rowindex(ws)
+
+    from_json = set()
     if args.skip_existing in ("json","both"):
-        done |= existing_tax_ids_from_json(args.out_dir)
+        if os.path.isdir(args.out_dir):
+            from_json = {canon_tax_id(fn[:-5]) for fn in os.listdir(args.out_dir) if fn.endswith(".json")}
+        done |= from_json
 
     remaining = [t for t in (canon_tax_id(x) for x in ids_all) if t not in done]
     start = max(args.offset, 0)
     end = (start + args.limit) if args.limit and args.limit > 0 else None
     ids = remaining[start:end]
     print(f"เหลือในคิว {len(remaining)} รายการ → รอบนี้จะทำ {len(ids)} รายการ")
+
+    buf = SheetBuffer(sh, ws, idx_map, batch_size=args.batch_size)
 
     driver = build_driver()
     try:
@@ -326,13 +390,21 @@ def main():
                 with open(fp, "w", encoding="utf-8") as f:
                     json.dump(row, f, ensure_ascii=False, indent=2)
                 print(f"💾 saved: {fp}")
-                upsert_row(ws, row)
-                print("⬆️  updated Google Sheets")
+
+                # ===== ใช้ batch buffer แทนการ upsert ทีละแถว =====
+                buf.add(row)
+                print("📝 queued for batch write")
 
             time.sleep(random.uniform(1.0, 2.0))
     finally:
-        try: driver.quit()
-        except Exception: pass
+        try:
+            driver.quit()
+        except Exception:
+            pass
+        # flush งานค้างทั้งหมดก่อนจบ
+        print("\n🚀 flush batch to Google Sheets ...")
+        buf.flush()
+        print("✅ done")
 
 if __name__ == "__main__":
     time.sleep(random.uniform(1.2, 2.5))
