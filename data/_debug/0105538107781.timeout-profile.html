@@ -1,0 +1,721 @@
+<html lang="th" class="pc page-loaded" style="--vhs: 7.61px; --vh: 7.61px;"><head>
+	<!-- Google tag (gtag.js) -->
+	<script id="bn-jssdk" src="https://console.botnoi.ai/customerchat/index.js"></script><script async="" src="https://www.googletagmanager.com/gtag/js?id=G-NSBDH4V63E"></script>
+	<script>
+		window.dataLayer = window.dataLayer || [];
+		function gtag(){dataLayer.push(arguments);}
+		gtag('js', new Date());
+		
+		gtag('config', 'G-NSBDH4V63E');
+	</script>
+	
+	<meta charset="utf-8">
+	<!--meta http-equiv="X-UA-Compatible" content="IE=edge, chrome=1" /-->
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<meta name="apple-mobile-web-app-capable" content="yes">
+	
+	<title>DBD DataWarehouse+</title>
+	
+	<link href="https://fonts.googleapis.com" rel="preconnect">
+	<link href="https://fonts.gstatic.com" rel="preconnect" crossorigin="">
+	<link href="https://fonts.googleapis.com/css2?family=Bai+Jamjuree:ital,wght@0,200;0,300;0,400;0,500;0,600;0,700;1,200;1,300;1,400;1,500;1,600;1,700&amp;family=Prompt:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,100;1,200;1,300;1,400;1,500;1,600;1,700;1,800;1,900&amp;display=swap" rel="stylesheet">
+	<link href="https://fonts.googleapis.com/css2?family=Sarabun:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;0,800;1,100;1,200;1,300;1,400;1,500;1,600;1,700;1,800&amp;display=swap" rel="stylesheet">
+	
+	<link href="/favicon.ico" rel="shortcut icon">
+	
+	<link href="/css/bootstrap/bootstrap.min.css" rel="stylesheet">
+	<link href="/css/animate.css" rel="stylesheet">
+	<link href="/css/swiper.css" rel="stylesheet">
+	<link href="/css/jquery.fancybox.css" rel="stylesheet">
+	<link href="/css/global.css" rel="stylesheet">
+<style type="text/css">.bn_reset {
+    background: none;
+    border: 0;
+    border-spacing: 0;
+    color: #000;
+    cursor: auto;
+    direction: ltr;
+    font-family: "lucida grande", tahoma, verdana, arial, sans-serif;
+    font-size: 13px;
+    font-style: normal;
+    font-variant: normal;
+    font-weight: normal;
+    letter-spacing: normal;
+    line-height: 1;
+    margin: 0;
+    overflow: visible;
+    padding: 0;
+    text-align: left;
+    text-decoration: none;
+    text-indent: 0;
+    text-shadow: none;
+    text-transform: none;
+    visibility: visible;
+    white-space: normal;
+    word-spacing: normal;
+}
+
+.bn_reset > div {
+    overflow: hidden;
+}
+
+.bn_iframe_widget {
+    display: inline-block;
+    position: relative;
+}
+
+.bn_invisible_flow {
+    display: inherit;
+    height: 0;
+    overflow-x: hidden;
+    width: 0;
+}
+
+.bn_iframe_widget span {
+    display: inline-block;
+    position: relative;
+    text-align: justify;
+}
+
+.bn_iframe_widget iframe {
+    position: absolute;
+}
+
+.bn_customer_chat_bounce_in {
+    animation-duration: 300ms;
+    animation-name: bn_bounce_in;
+    transition-timing-function: ease-in;
+}
+
+.bn_customer_chat_bounce_out {
+    animation-duration: 300ms;
+    animation-name: bn_bounce_out;
+    transition-timing-function: ease-in;
+}
+
+@keyframes bn_bounce_in {
+    0% {
+        opacity: 0;
+        transform: scale(0, 0);
+        transform-origin: bottom right;
+    }
+    50% {
+        transform: scale(1.03, 1.03);
+        transform-origin: bottom right;
+    }
+    100% {
+        opacity: 1;
+        transform: scale(1, 1);
+        transform-origin: bottom right;
+    }
+}
+
+@keyframes bn_bounce_out {
+    0% {
+        opacity: 1;
+        transform: scale(1, 1);
+        transform-origin: bottom right;
+    }
+    100% {
+        opacity: 0;
+        transform: scale(0, 0);
+        transform-origin: bottom right;
+    }
+}
+
+.bn_dialog_advanced {
+    border-radius: 8px;
+    padding: 10px;
+}
+.bn_dialog {
+    background: rgba(82, 82, 82, .7);
+    position: absolute;
+    top: -10000px;
+    z-index: 10001;
+}
+.bn_dialog_content {
+    background: #fff;
+    color: #373737;
+}
+
+.iframe-style {
+    padding: 0px;
+    position: fixed !important;
+    z-index: 2147483646;
+    border-radius: 16px;
+    top: auto;
+    width: 399px;
+    max-height: 0px;
+    background: rgba(0, 0, 0, 0) none repeat scroll 0% 0%;
+    bottom: 85px;
+    right: 4px;
+    margin-right: 12px;
+    visibility: visible;
+    min-height: 0px;
+    height: 732px;
+}
+
+.iframe-style.open {
+    max-height: calc(100% - 80px);
+    min-height: 80vh;
+}
+
+.budge-style {
+    margin: 0px 12px;
+    padding: 0px;
+    cursor: pointer;
+    position: fixed;
+    z-index: 2147483644;
+    bottom: 24px;
+    top: auto;
+    height: 60px;
+    width: 60px;
+    border-radius: 29px;
+    box-shadow: rgba(0, 0, 0, 0.15) 0px 4px 12px 0px;
+    background-repeat: no-repeat;
+    background-size: 80%;
+    background-position: center center;
+    display: block;
+    right: 12px;
+}
+
+@media only screen and (max-width: 599.99px) and (orientation: portrait) {  
+    .iframe-style.mobile {
+        position: fixed !important;
+        z-index: 2147483646;
+        box-shadow: none;
+        border-radius: 0px;
+        top: 0px;
+        right: 0px;
+        height: 100%;
+        width: 100%;
+        visibility: visible;
+        max-height: 0px;
+        min-height: 0px !important;
+        bottom: unset !important;
+        margin-right: 0 !important;
+    }
+    .iframe-style.mobile.open {
+        max-height: calc(100% - 85px);
+    }
+}
+@media only screen and (max-width: 959.99px) and (orientation: landscape) {  
+    .iframe-style.mobile {
+        position: fixed !important;
+        z-index: 2147483646;
+        box-shadow: none;
+        border-radius: 0px;
+        top: 0px;
+        right: 0px;
+        height: 100%;
+        width: 100%;
+        visibility: visible;
+        max-height: 0px;
+        min-height: 0px !important;
+        bottom: unset !important;
+        margin-right: 0 !important;
+    }
+    .iframe-style.mobile.open {
+        max-height: calc(100% - 85px);
+    }
+}
+@media only screen and (min-width: 600px) and (max-width: 839.99px) and (orientation: portrait) {  
+    .iframe-style.mobile {
+        position: fixed !important;
+        z-index: 2147483646;
+        box-shadow: none;
+        border-radius: 0px;
+        top: 0px;
+        right: 0px;
+        height: 100%;
+        width: 100%;
+        visibility: visible;
+        max-height: 0px;
+        min-height: 0px !important;
+        bottom: unset !important;
+        margin-right: 0 !important;
+    }
+    .iframe-style.mobile.open {
+        max-height: calc(100% - 85px);
+    }
+}
+</style></head>
+
+<body> 
+	<div class="preload" style="display: none;"></div>
+	<div class="page page-index">
+		<header class="header">
+			<div class="container">
+				<div class="navbar-brand">
+					<a href="/index"> <img src="/img/logo-2.svg" alt=""> </a>
+				</div>
+
+				<div class="form-group search">
+					<div class="group">
+						<input class="form-control" placeholder="ค้นหาข้อมูลนิติบุคคล">
+						<span class="icons icon-search float"></span>
+					</div>
+				</div>
+				<!--form-group-->
+
+				<ul class="nav nav-main">
+	<li class="nav-home">
+		<a href="/index"><span class="icons icon-home"></span></a>
+	</li>
+	<li class="dropdown d-none d-lg-block"><a href="#" data-bs-toggle="dropdown" data-bs-display="static">เมนู</a>
+		<ul class="dropdown-menu lv-1">
+			<li class="dropdown"><a href="#" data-bs-toggle="dropdown" data-bs-display="static">บริการข้อมูล</a>
+				<ul class="dropdown-menu lv-2">
+					<li><a href="/juristic/index">ข้อมูลนิติบุคคลและงบการเงิน</a></li>
+					<li><a href="/biztype/index">ข้อมูลประเภทธุรกิจ</a></li>
+					<li><a href="/investment/index"> การลงทุนจากต่างชาติ<br>ในนิติบุคคลไทย</a></li>
+					<li><a href="/biz/partner/index">คู่ค้าทางธุรกิจ</a></li>
+					<li><a href="/biz/opportunity/index">โอกาสทางธุรกิจ</a></li>
+					<li><a href="/area/index">ข้อมูลรายพื้นที่</a></li>
+					<li><a href="/foreign/index">ข้อมูลนิติบุคคลต่างประเทศ</a></li>
+					<li><a href="/stats">สถิติและการจัดอันดับ</a></li>
+				</ul>
+			</li>
+			<li class="dropdown"><a href="#" data-bs-toggle="dropdown" data-bs-display="static">การใช้งานระบบ</a>
+				<ul class="dropdown-menu lv-2">
+					<li><a href="https://www.dbd.go.th/download/document_file/pdpa/dbd_pdpa_policy.pdf" target="_blank">นโยบายการคุ้มครองข้อมูลส่วนบุคคล</a></li>
+					<li><a href="/dlf/policy" target="_blank">นโยบายการใช้งาน</a></li>
+					<li><a href="/dlf/manual" target="_blank">คำแนะนำการใช้งานระบบ</a></li>
+					<li><a href="/dlf/vocab" target="_blank">คำศัพท์ทางธุรกิจ</a></li>
+					<li><a href="https://tsic.dbd.go.th" target="_blank">ระบบค้นหาประเภทธุรกิจ (TSIC)</a></li>
+<!-- 					<li><a href="#">แบบประเมินความพึงพอใจ</a></li>				 -->
+				</ul>
+			</li>
+			<li><a href="https://www.dbd.go.th/common-article/24" target="_blank">สถิติข้อมูล</a></li>
+<!-- 			<li> -->
+<!-- 				<a th:href="${(session?.userModel != null) ? '#consentModal' : '#loginModal'}" data-bs-toggle="modal" id="consentLogin">แจ้งการเปิดแผยข้อมูล</a> -->
+<!-- 			</li> -->
+		</ul>
+	</li>
+	<!--dropdown-menu-->
+	
+	<li class="d-none d-lg-block"><a href="/guideline">ให้เราช่วยอะไรคุณได้บ้าง?</a></li>
+	<li><label class="switch-item lang"> <input type="checkbox" id="chlang"> <span class="slider round"></span></label></li>
+	
+		<li class="d-none d-lg-block"><a href="#loginModal" data-bs-toggle="modal">เข้าสู่ระบบ</a></li>
+		
+	
+	<!--dropdown-menu-->
+
+	<li class="d-block d-md-none mx-2">
+		<div class="search-mobile-button">
+			<span class="icons icon-search"></span>
+		</div>
+	</li>
+	<li class="d-block d-lg-none">
+		<button class="btn btn-icon navbar-toggle" type="button">
+			<span class="group"> <span></span> <span></span> <span></span></span>
+		</button>
+	</li>
+</ul>
+
+<script src="/js/jquery-3.4.1.min.js"></script>
+
+<script type="text/javascript">
+	/*<![CDATA[*/		
+	$(function() {
+		$("#chlang").click(function() {
+			if($(this).prop("checked")) {
+				window.location = "\/en\/index";
+			} else {
+				window.location = "\/th\/index";
+			}
+		});
+	});
+	
+	/*]]>*/
+</script>
+			</div>
+			<!--container-->
+		</header>
+
+		<div class="navbar-slide d-flex d-lg-none">
+	<div class="navbar-inner">
+		<div class="nav-close sidebar-toggle"></div>
+
+		<ul class="nav nav-menu">
+			<li class="dropdown">
+				<a href="#" data-bs-toggle="dropdown" data-bs-display="static">บริการข้อมูล</a>
+				<div class="dropdown-menu">
+					<ul class="nav nav-dropdown">
+						<li class="nav-title"><span><span class="arrow"></span>บริการข้อมูล</span></li>
+						<li><a href="/juristic/index">ข้อมูลนิติบุคคลและงบการเงิน</a></li>
+						<li><a href="/biztype/index">ข้อมูลประเภทธุรกิจ</a></li>
+						<li><a href="/investment/index"> การลงทุนจากต่างชาติ<br>ในนิติบุคคลไทย</a></li>
+						<li><a href="/biz/partner/index">คู่ค้าทางธุรกิจ</a></li>
+						<li><a href="/biz/opportunity/index">โอกาสทางธุรกิจ</a></li>
+						<li><a href="/area/index">ข้อมูลรายพื้นที่</a></li>
+						<li><a href="/foreign/index">ข้อมูลนิติบุคคลต่างประเทศ</a></li>
+						<li><a href="/stats">สถิติและการจัดอันดับ</a></li>
+					</ul>
+				</div>				
+			</li>
+			<!--dropdown-menu-->
+			
+			<li class="dropdown">
+				<a href="#" data-bs-toggle="dropdown" data-bs-display="static">การใช้งานระบบ</a>
+				<div class="dropdown-menu">
+					<ul class="nav nav-dropdown">
+						<li class="nav-title"><span><span class="arrow"></span>การใช้งานระบบ</span></li>												
+						<li><a href="https://www.dbd.go.th/download/document_file/pdpa/dbd_pdpa_policy.pdf">นโยบายการคุ้มครองข้อมูลส่วนบุคคล</a></li>
+						<li><a href="/dlf/policy">นโยบายการใช้งาน</a></li>
+						<li><a href="/dlf/manual">คำแนะนำการใช้งานระบบ</a></li>
+						<li><a href="/dlf/vocab">คำศัพท์ทางธุรกิจ</a></li>
+						<li><a href="https://tsic.dbd.go.th">ระบบค้นหาประเภทธุรกิจ (TSIC)</a></li>
+					</ul>
+				</div>				
+			</li>
+			<!--dropdown-menu-->
+			
+			<li><a href="https://www.dbd.go.th/common-article/24" target="_blank">สถิติข้อมูล</a></li>
+			<li><a href="/guideline">ให้เราช่วยอะไรคุณได้บ้าง?</a></li>
+
+			
+				
+					<li><a href="#loginModal" data-bs-toggle="modal">เข้าสู่ระบบ</a></li>
+				
+
+				
+			
+		</ul>
+	</div>
+</div>
+
+<form action="/authen_dbd" method="post" id="loginForm">
+	<div class="modal modal-login fade" id="loginModal">
+		<div class="modal-dialog modal-dialog-centered">
+			<div class="modal-content">
+				<button type="button" class="btn-close d-block" data-bs-dismiss="modal"></button>
+	
+				<div class="modal-logo">
+					<img class="w-100" src="/img/logo-2.svg" alt="">
+				</div>
+	
+				<h2 class="modal-title pt-2">เข้าสู่ระบบ</h2>		
+	
+				<div class="modal-body">
+					<div class="form-group">
+						<input type="text" class="form-control" placeholder="ชื่อผู้ใช้งาน" name="username" id="username">
+					</div>
+	
+					<div class="form-group">
+						<input type="password" class="form-control" autocomplete="off" placeholder="รหัสผ่าน" name="password" id="password">
+					</div>
+					
+					<div class="form-group pt-md-2 text-center hide" id="error">
+						<span style="color: red;">** ไม่พบข้อมูลผู้ใช้งานหรือรหัสผ่านไม่ถูกต้อง **</span>
+					</div>
+	
+					<div class="form-group pt-md-2">
+						<button class="btn btn-light w-100" type="submit" id="btnLogin">เข้าสู่ระบบ</button>
+						<div style="display: flex;">
+							<p class="d-flex my-2 me-auto">
+								<a class="grey-link" href="https://ereg.dbd.go.th/MemberToMemberLvZero/nonmemberpages/forgetUsername.xhtml" target="_blank">ลืมชื่อผู้ใช้งาน?</a>
+							</p>
+							<p class="d-flex my-2 ms-auto">
+								<a class="grey-link" href="https://ereg.dbd.go.th/MemberToMemberLvZero/nonmemberpages/forgetPassword.xhtml" target="_blank">ลืมรหัสผ่าน?</a>
+							</p>
+						</div>					
+					</div>
+	
+					<div class="socail-connect">
+						<p style="color: #212529;">หรือเข้าสู่ระบบด้วย</p>
+						<div class="d-flex">							
+							<a href="/oauth2/authorization/facebook">
+								<button class="btn btn-shadow" type="button">
+									<svg xmlns="http://www.w3.org/2000/svg" width="14" height="29" viewBox="0 0 14 29" fill="none" class="svg-js" src="/img/icons/icon-facebook-3.svg" alt="" title="Facebook">
+<path d="M3.57388 29V15.3924H0V10.493H3.57388V6.30822C3.57388 3.01983 5.68498 0 10.5494 0C12.5189 0 13.9753 0.190095 13.9753 0.190095L13.8606 4.76531C13.8606 4.76531 12.3753 4.75075 10.7545 4.75075C9.00031 4.75075 8.71926 5.56464 8.71926 6.91548V10.493H14L13.7702 15.3924H8.71926V29H3.57388Z" fill="#555555"></path>
+</svg>
+								</button>
+							</a>
+							<a href="/apple">
+								<button class="btn btn-shadow" type="button">
+									<svg xmlns="http://www.w3.org/2000/svg" width="23" height="27" viewBox="0 0 23 27" fill="none" class="svg-js" src="/img/icons/icon-apple-3.svg" alt="" title="Apple">
+<path d="M18.6264 14.2175C18.6143 12.1528 19.5497 10.5968 21.4388 9.44941C20.3822 7.93574 18.7838 7.10322 16.6768 6.94277C14.6817 6.78535 12.499 8.10527 11.6998 8.10527C10.8552 8.10527 8.92373 6.99727 7.404 6.99727C4.26768 7.0457 0.93457 9.49785 0.93457 14.4869C0.93457 15.9612 1.204 17.484 1.74287 19.0521C2.46338 21.1168 5.06084 26.1755 7.77031 26.0937C9.18711 26.0604 10.1892 25.0887 12.0328 25.0887C13.822 25.0887 14.7483 26.0937 16.3286 26.0937C19.0623 26.0544 21.4115 21.4559 22.0957 19.3852C18.4296 17.6565 18.6264 14.3234 18.6264 14.2175ZM15.4446 4.98408C16.9795 3.16162 16.8402 1.50264 16.7948 0.90625C15.4386 0.984961 13.8704 1.82959 12.9773 2.86797C11.9935 3.98203 11.4152 5.35947 11.5394 6.9125C13.0046 7.02451 14.3427 6.2707 15.4446 4.98408Z" fill="#555555"></path>
+</svg>
+								</button>
+							</a>
+							<a href="/oauth2/authorization/google">
+								<button class="btn btn-shadow" type="button">
+									<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 20 20" fill="none" class="svg-js" src="/img/icons/icon-google-3.svg" alt="" title="Google">
+<path d="M19.103 7.998C19.226 8.657 19.293 9.346 19.293 10.065C19.293 15.689 15.529 19.688 9.844 19.688C8.55116 19.6884 7.27091 19.434 6.0764 18.9395C4.88189 18.4449 3.79654 17.7198 2.88236 16.8056C1.96818 15.8915 1.2431 14.8061 0.748528 13.6116C0.25396 12.4171 -0.000393722 11.1368 4.57452e-07 9.844C-0.000393722 8.55116 0.25396 7.27091 0.748528 6.0764C1.2431 4.88189 1.96818 3.79654 2.88236 2.88236C3.79654 1.96818 4.88189 1.2431 6.0764 0.748528C7.27091 0.25396 8.55116 -0.000393722 9.844 4.57452e-07C12.502 4.57452e-07 14.723 0.978001 16.427 2.566L13.652 5.341V5.334C12.619 4.35 11.308 3.845 9.844 3.845C6.596 3.845 3.956 6.589 3.956 9.838C3.956 13.086 6.596 15.836 9.844 15.836C12.791 15.836 14.797 14.151 15.209 11.837H9.844V7.998H19.104H19.103Z" fill="#555555"></path>
+</svg>
+								</button>
+							</a>
+							<a href="/oauth2/authorization/line">
+								<button class="btn btn-shadow" type="button">
+									<svg xmlns="http://www.w3.org/2000/svg" width="26" height="25" viewBox="0 0 26 25" fill="none" class="svg-js" src="/img/icons/icon-line-3.svg" alt="" title="Line">
+<path d="M20.9763 10.1637C21.0681 10.1605 21.1596 10.176 21.2453 10.2092C21.331 10.2425 21.4092 10.2928 21.4752 10.3572C21.5413 10.4216 21.5938 10.4988 21.6297 10.5841C21.6655 10.6694 21.684 10.7612 21.684 10.8539C21.684 10.9466 21.6655 11.0384 21.6297 11.1237C21.5938 11.209 21.5413 11.2862 21.4752 11.3506C21.4092 11.415 21.331 11.4653 21.2453 11.4986C21.1596 11.5318 21.0681 11.5473 20.9763 11.5441H19.0759V12.7745H20.9763C21.0686 12.77 21.1609 12.7844 21.2475 12.8169C21.3342 12.8494 21.4134 12.8994 21.4803 12.9637C21.5472 13.0281 21.6005 13.1055 21.6369 13.1913C21.6733 13.277 21.6921 13.3694 21.6921 13.4627C21.6921 13.556 21.6733 13.6483 21.6369 13.7341C21.6005 13.8199 21.5472 13.8973 21.4803 13.9616C21.4134 14.026 21.3342 14.0759 21.2475 14.1085C21.1609 14.141 21.0686 14.1554 20.9763 14.1509H18.395C18.2146 14.1502 18.0417 14.0775 17.9143 13.9485C17.7868 13.8195 17.7152 13.6449 17.7149 13.4627V8.24593C17.7149 7.86616 18.0196 7.55446 18.395 7.55446H20.9812C21.1566 7.56361 21.3219 7.64055 21.4427 7.76934C21.5634 7.89813 21.6305 8.06889 21.63 8.24624C21.6295 8.4236 21.5614 8.59395 21.4399 8.72201C21.3183 8.85007 21.1526 8.92602 20.9771 8.93412H19.0767V10.1645L20.9763 10.1637ZM16.8049 13.4619C16.8034 13.6446 16.7306 13.8193 16.6021 13.948C16.4737 14.0767 16.3002 14.149 16.1192 14.1492C16.012 14.1503 15.9061 14.1262 15.8098 14.0788C15.7135 14.0313 15.6294 13.962 15.5642 13.8761L12.9196 10.2449V13.4611C12.9196 13.6436 12.8477 13.8186 12.7199 13.9477C12.5921 14.0767 12.4187 14.1492 12.2379 14.1492C12.0571 14.1492 11.8837 14.0767 11.7558 13.9477C11.628 13.8186 11.5562 13.6436 11.5562 13.4611V8.24429C11.5562 7.94982 11.7471 7.6857 12.0217 7.59137C12.0896 7.56719 12.1611 7.55525 12.233 7.5561C12.4443 7.5561 12.6392 7.67176 12.7701 7.83417L15.4359 11.4736V8.24429C15.4359 7.86451 15.7406 7.55282 16.1176 7.55282C16.4946 7.55282 16.8033 7.86451 16.8033 8.24429L16.8049 13.4619ZM10.5844 13.4619C10.5836 13.6448 10.5109 13.82 10.3824 13.949C10.2539 14.078 10.0799 14.1503 9.89869 14.1501C9.71881 14.1485 9.54679 14.0754 9.42004 13.9465C9.2933 13.8177 9.22208 13.6435 9.22188 13.4619V8.24511C9.22188 7.86534 9.52656 7.55364 9.90356 7.55364C10.2797 7.55364 10.5852 7.86534 10.5852 8.24511L10.5844 13.4619ZM7.91375 14.1501H5.32756C5.14652 14.1496 4.97296 14.0771 4.84456 13.9483C4.71617 13.8194 4.64331 13.6446 4.64181 13.4619V8.24511C4.64181 7.86534 4.95056 7.55364 5.32756 7.55364C5.70456 7.55364 6.00925 7.86534 6.00925 8.24511V12.7737H7.91375C8.09454 12.7737 8.26793 12.8462 8.39578 12.9753C8.52362 13.1043 8.59544 13.2794 8.59544 13.4619C8.59544 13.6444 8.52362 13.8194 8.39578 13.9485C8.26793 14.0776 8.09454 14.1501 7.91375 14.1501ZM26 10.6542C26 4.78039 20.1638 0 13 0C5.83619 0 0 4.78039 0 10.6542C0 15.9177 4.62556 20.3265 10.8713 21.164C11.2946 21.2534 11.8698 21.4461 12.0185 21.8095C12.1493 22.1376 12.103 22.6462 12.0608 22.9931L11.8828 24.1078C11.8316 24.4368 11.6204 25.403 13.0171 24.8132C14.4178 24.2235 20.5116 20.3536 23.2407 17.1825C25.1071 15.1196 26 13.0001 26 10.6542Z" fill="#555555"></path>
+</svg>
+								</button>
+							</a>
+						</div>
+					</div>
+					<!--socail-connect-->
+	
+					<div class="form-group">
+						<button class="btn btn-darkness w-100" onclick="window.open('https://ereg.dbd.go.th/MemberToMemberLvZero/nonmemberpages/newMemberLevelZero.xhtml','_blank'); return false;">ลงทะเบียนเข้าใช้งาน</button>
+					</div>
+				</div>
+				<!--modal-body-->
+			</div>
+			<!--modal-content-->
+		</div>
+		<!--modal-dialog-->
+	</div>
+</form>
+<!-- Modal -->
+
+<script src="/js/jquery-3.4.1.min.js"></script>
+<script src="/js/bootstrap/popper.min.js"></script>
+<script src="/js/bootstrap/bootstrap.min.js"></script>
+<script src="/js/ie11CustomProperties.js"></script>
+<script src="/js/wow.js"></script>
+<script src="/js/swiper.js"></script>
+<script src="/js/jquery.fancybox.js"></script>
+<script src="/js/custom.js"></script>
+<script src="/js/jquery-form.min.js"></script>
+
+<script src="/js/tableHeadFixer.js"></script>
+<script src="/js/fastselect.standalone.min.js"></script>
+
+<script type="text/javascript">
+	/*<![CDATA[*/		
+	$(function() {
+		$("#btnLogin").on("click" ,function(e) {
+			e.preventDefault();
+			
+			$("#error").addClass("hide");
+			
+			$("#loginForm").ajaxSubmit({
+				success : function(data) {
+					if(data === "fail") {
+						$("#error").removeClass("hide");
+					} else {
+						window.location.href = "\/juristic\/index";
+					}
+				}
+			});
+		});
+	});
+	/*]]>*/
+</script>
+
+		<div class="section section-body mainpage fit-content">
+			<div class="container">
+				<div class="row my-auto">
+					<div class="col-xl-7">
+						<div class="search-container w-100">
+							<div class="logo small">
+								<a href="/index"><img src="/img/logo.svg" alt=""></a>
+								<h3>ผู้ช่วยในการค้นหาข้อมูลนิติบุคคลและสร้างโอกาสทางธุรกิจ</h3>
+							</div>
+							<form id="form" action="/searchJuristic" method="post" class="form-group search lg">
+								<div class="group" data-bs-toggle="dropdown" data-bs-display="static">
+									<input id="textSearchIndex" name="textSearch" class="form-control" autocomplete="off" placeholder="ค้นหาด้วยชื่อหรือเลขทะเบียนนิติบุคคล โดยไม่ต้องระบุคำว่า บริษัท ห้างหุ้นส่วนจำกัด">									
+									<span id="searchicon" class="icons icon-search float"> <svg xmlns="http://www.w3.org/2000/svg" width="26" height="23" viewBox="0 0 26 23" fill="none" class="svg-js" src="/img/icons/icon-search.svg" alt="">
+<circle cx="9.9" cy="9.9" r="8.4" stroke="#273D62" stroke-width="3"></circle>
+<line x1="17.1145" y1="15.6114" x2="24.9145" y2="21.6114" stroke="#273D62" stroke-width="3"></line>
+</svg> </span>
+								</div>
+								
+								<ul class="dropdown-menu search" id="suggestionIndex">
+
+								</ul>
+							</form>
+							<!--form-group-->
+
+							<h6 class="pt-4">พิมพ์ชื่อหรือเลขทะเบียนนิติบุคคล ที่ต้องการค้นหาในช่องค้นหาด้านบน</h6>
+						</div>
+						<!--search-container-->
+					</div>
+					<!--col-xl-7-->
+					<div class="col-xl-5">
+						<ul class="mainpage-infos">
+							<li class="icons icon-white">
+								<img src="/img/icons/icon-index-1-black.png" alt="">
+							</li>
+							<li class="text">
+								<h2>ข้อมูลนิติบุคคลและงบการเงิน</h2>
+								<p>ค้นหาข้อมูลนิติบุคคล เช่น สถานะ ที่ตั้ง ทุนจดทะเบียน ประวัติการเปลี่ยนแปลง และแสดงผลการดำเนินงาน<br class="d-none d-lg-block">ในรูปแบบรายการสำคัญทางการเงินของงบกำไรขาดทุน งบแสดงฐานะการเงิน และอัตราส่วนทางการเงิน เป็นต้น</p>
+<!-- 								<p>สามารถค้นหาข้อมูลนิติบุคคล และข้อมูลงบการเงินของนิติบุคคล หรือในภาพรวมของกลุ่มธุรกิจ ซึ่งแสดงผล<br class="d-none d-lg-block"/>การดำเนินงานในรูปแบบรายการสำคัญทางการเงินของ<br class="d-none d-lg-block"/>งบกำไรขาดทุน งบแสดงฐานะการเงิน และอัตราส่วนทางการเงิน</p> -->
+							</li>
+						</ul>
+					</div>
+					<!--col-xl-5-->
+				</div>
+				<!--row-->
+			</div>
+			<!--container-->
+		</div>
+		<!--section-body-->
+
+		<div class="chat-popup">
+	<span class="chat-close"></span>
+<!-- 	<p>สวัสดี! ให้เราช่วยอะไรได้บ้าง</p> -->
+	<p>ให้น้อง SUPER ช่วยคุณนะครับ</p>
+	<p id="chat" style="cursor: pointer;">เริ่มต้นแชท</p>
+</div>
+
+<div id="bn-root" class="bn_reset"><div class="bn-customerchat bn_invisible_flow bn_iframe_widget" bot_id="622b2cce36815ac33dad0915" bot_logo="https://bn-sme-production.s3.amazonaws.com/622b2cce36815ac33dad0915/b219c5fd-0055-4a60-a7bf-20b1d1e827ad.png" bot_name="น้อง SUPER" locale="th" theme_color="#cde3fa" logged_in_greeting="น้อง SUPER สวัสดีครับ ผมเป็น Chatbot ผู้ช่วยในการใช้งาน DBD DataWarehouse+ สอบถามข้อมูลคลิกที่ปุ่มด้านล่างเพื่อเริ่มการสนทนาได้เลยนะครับ Chatbot only available in Thai language" greeting_message="Botnoi_Greeting">
+<span style="vertical-align: bottom; width: 1000px; height: 0px;"><iframe class="iframe-style bn_customer_chat_bounce_out" allowfullscreen="" height="1000px" width="1000px" frameborder="0" scrolling="none" allow="encrypted-media" src="https://console.botnoi.ai/customer-chat?bot_id=622b2cce36815ac33dad0915&amp;bot_logo=https://bn-sme-production.s3.amazonaws.com/622b2cce36815ac33dad0915/b219c5fd-0055-4a60-a7bf-20b1d1e827ad.png&amp;bot_name=น้อง SUPER&amp;theme_color=%23cde3fa&amp;logged_in_greeting=น้อง SUPER สวัสดีครับ ผมเป็น Chatbot ผู้ช่วยในการใช้งาน DBD DataWarehouse+ สอบถามข้อมูลคลิกที่ปุ่มด้านล่างเพื่อเริ่มการสนทนาได้เลยนะครับ Chatbot only available in Thai language&amp;greeting_message=Botnoi_Greeting&amp;locale=th_TH"></iframe></span></div><div class="bn_dialog bn_dialog_advanced" style="overflow: visible; z-index: 2147483644;"><div class="bn_dialog_content"><div class="budge-style" style="background-color: rgb(205, 227, 250); background-image: url(&quot;https://bn-sme-production.s3.amazonaws.com/622b2cce36815ac33dad0915/b219c5fd-0055-4a60-a7bf-20b1d1e827ad.png&quot;);"></div></div></div></div>
+<script>
+	window.onload = function() {
+		BN.init({
+			version : "1.0"
+		});
+	};
+</script>
+<script>
+	(function(d, s, id) {
+		var js, bjs = d.getElementsByTagName(s)[0];
+		if (d.getElementById(id))
+			return;
+		js = d.createElement(s);
+		js.id = id;
+		js.src = "https://console.botnoi.ai/customerchat/index.js";
+		bjs.parentNode.insertBefore(js, bjs);
+	})(document, "script", "bn-jssdk");
+</script>
+
+
+<footer class="footer">
+	<div class="container">
+		<div class="cols">
+			<div class="logo">
+				<img class="w-100" src="/img/logo--3.png" alt="">
+			</div>
+			<div class="footer-infos">
+				<h4>DBD DataWarehouse+ Team</h4>
+				<p>
+					โทรศัพท์: <a href="tel:025474376">02-547-4376</a>
+				</p>
+				<p>
+					email: <a href="mailto:datawarehouse@dbd.go.th">datawarehouse@dbd.go.th</a>
+				</p>
+
+				<div class="followus">
+					<a class="icons icon-facebook" href="https://www.facebook.com/DBDdataWarehouse" target="_blank"></a> 
+					<a class="icons icon-twitter" href="https://twitter.com/bitdbd" target="_blank"></a> 
+					<a class="icons icon-youtube" href="https://www.youtube.com/channel/UCL22IaMgXS0SSxlI-rJ0xfw" target="_blank"></a>
+					<span class="my-auto ps-3">DBD BIT</span>
+				</div>
+			</div>
+		</div>
+		<!--cols-->
+
+		<div class="cols">
+			<p class="text-center">กรมพัฒนาธุรกิจการค้า กระทรวงพาณิชย์ </p>
+			<p class="text-center">จำนวนผู้เข้าใช้งานระบบ นับตั้งแต่ ธันวาคม 2561</p>
+			<ul class="user-counter">
+				<li>0</li>
+				<li>0</li>
+				<li>7</li>
+				<li>6</li>
+				<li>2</li>
+				<li>9</li>
+				<li>1</li>
+				<li>6</li>
+				<li>3</li>
+				<li>8</li>
+			</ul>
+			<p class="text-center">
+				<small>
+					<a href="/dlf/policy" target="_blank">แนวนโยบายการใช้งาน</a> | 
+					<a href="https://www.dbd.go.th/download/document_file/pdpa/dbd_pdpa_policy.pdf" target="_blank">แนวนโยบายการคุ้มครองข้อมูลส่วนบุคคล</a><br>
+					© 2022 "DBD" (Department of Business Development)
+				</small>
+			</p>
+		</div>
+	</div>
+	<!--container-->
+</footer>
+
+<script type="text/javascript">
+	/*<![CDATA[*/
+	
+	$("#chat").click(function() {		
+		$(".budge-style").trigger("click");
+		$(".chat-close").trigger("click");
+	});
+	
+	$(".chat-close").click(function() {
+		let chatCloseUrl = "\/chat\/close";
+		
+		$.post({
+	    	url : chatCloseUrl,
+			success : function(data) {
+
+			}
+		});	
+	});
+	
+	/*]]>*/
+</script>
+	</div>
+	
+	<script type="text/javascript">
+		/*<![CDATA[*/
+		$(document).ready(function() {
+			var suggestIndexUrl = "\/company\/suggestion";
+			
+			function delay(callback, ms) {
+				var timer = 0;
+				
+				return function() {
+					var context = this, args = arguments;
+				    clearTimeout(timer);
+				    timer = setTimeout(function () {
+				    	callback.apply(context, args);
+				    }, ms || 0);
+				};
+			}
+	
+			$("#textSearchIndex").keyup(delay(function (e) {
+				if($("#textSearchIndex").val().length >= 3) {
+					$("#suggestionIndex").html('<div class="preload-table"><div class="loader"></div><p class="text">Loading...</p></div>');
+					
+					if ($("#textSearchIndex").val() != null && $("#textSearchIndex").val() != '') {
+						$.post({
+					    	url : suggestIndexUrl,
+					    	contentType: "application/json; charset=utf-8",
+					    	data: '{"data":"' + $("#textSearchIndex").val() + '"}',
+							success : function(data) {
+								$("#suggestionIndex").empty();
+								$("#suggestionIndex").html(data);
+							}
+						});	
+					} else {
+						$("#suggestionIndex").empty();
+					}
+				} else {
+					$("#suggestionIndex").empty();
+				}
+			}, 500));
+			
+			$("#searchicon").click(function() {
+				$("#form").submit();
+			});
+		});
+		/*]]>*/
+	</script>
+	
+	<script type="text/javascript">
+	/*<![CDATA[*/
+		$(document).ready(function() {
+			$("#form").submit(function(e) {
+				if($("#textSearchIndex").val().length < 3) {
+					return false;
+				}
+	   		});
+		});
+	/*]]>*/
+   	</script>
+
+
+<div class="page-blocker"></div></body></html>
