@@ -1,7 +1,9 @@
 # -*- coding: utf-8 -*-
-import os, re, time, random, json, argparse
+import os, re, time, random, json, argparse, math, sys, traceback
 from datetime import datetime, timezone
 from urllib.parse import urljoin
+from typing import Callable, Iterable, Optional, Dict, Any, List
+
 from bs4 import BeautifulSoup
 
 # Selenium
@@ -12,41 +14,69 @@ from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import (
-    TimeoutException, ElementClickInterceptedException, StaleElementReferenceException
+    TimeoutException, ElementClickInterceptedException, StaleElementReferenceException,
+    WebDriverException, NoSuchWindowException
 )
 
 # Google Sheets
 import gspread
 from google.oauth2.service_account import Credentials
 
-PAGE_LOAD_TIMEOUT = 90
+PAGE_LOAD_TIMEOUT = 60
 BASE = "https://datawarehouse.dbd.go.th"
+
+# ======== Retry helpers ========
+def backoff_sleep(attempt: int, base: float = 0.8, cap: float = 8.0):
+    # exponential backoff + jitter
+    delay = min(cap, base * (2 ** attempt)) + random.uniform(0.05, 0.35)
+    time.sleep(delay)
+
+def with_retry(fn: Callable[[], Any], tries: int = 3, on_fail: Optional[Callable[[Exception,int], None]] = None):
+    last = None
+    for i in range(tries):
+        try:
+            return fn()
+        except Exception as e:
+            last = e
+            if on_fail: 
+                try: on_fail(e, i)
+                except Exception: pass
+            if i < tries - 1:
+                backoff_sleep(i)
+            else:
+                raise last
 
 # ========== Utils ==========
 def canon_tax_id(x: str) -> str:
-    """ทำเลขผู้เสียภาษีให้เป็นรูปแบบมาตรฐาน: เก็บเฉพาะตัวเลขและเติม 0 ซ้ายให้ครบ 13 หลัก"""
     t = re.sub(r"\D", "", str(x or ""))
     return t.zfill(13) if t else ""
 
-def remove_ids_from_txt(path: str, tax_ids):
-    """ลบ tax_id (canonical) หลายตัวออกจากไฟล์ path แบบปลอดภัย (เขียนครั้งเดียว)"""
-    if not os.path.exists(path) or not tax_ids:
-        return
+def remove_ids_from_txt(path: str, tax_ids: Iterable[str]):
+    if not os.path.exists(path): return
     targets = {canon_tax_id(t) for t in tax_ids if t}
     tmp = path + ".tmp"
     with open(path, "r", encoding="utf-8") as src, open(tmp, "w", encoding="utf-8") as dst:
         for line in src:
             raw = line.split("#", 1)[0].strip()
-            if not raw:
-                continue
-            cur = canon_tax_id(re.sub(r"\D", "", raw))
-            if cur and cur not in targets:
+            cur = canon_tax_id(re.sub(r"\D", "", raw)) if raw else ""
+            if not cur or cur not in targets:
                 dst.write(line)
     os.replace(tmp, path)
 
 def append_log(log_path: str, text: str):
+    os.makedirs(os.path.dirname(log_path) or ".", exist_ok=True)
     with open(log_path, "a", encoding="utf-8") as f:
         f.write(text + "\n")
+
+def safe_write_json(fp: str, obj: Dict[str, Any]):
+    os.makedirs(os.path.dirname(fp) or ".", exist_ok=True)
+    tmp = fp + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(obj, f, ensure_ascii=False, indent=2)
+    os.replace(tmp, fp)
+
+def now_utc_iso() -> str:
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 # ========== Selenium helpers ==========
 def build_driver():
@@ -55,43 +85,62 @@ def build_driver():
     opts.add_argument("--no-sandbox")
     opts.add_argument("--disable-dev-shm-usage")
     opts.add_argument("--disable-blink-features=AutomationControlled")
+    opts.add_argument("--disable-gpu")
+    opts.add_argument("--disable-software-rasterizer")
     opts.add_argument("--window-size=1365,900")
+    opts.add_argument("--remote-debugging-port=9222")
     ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125 Safari/537.36"
     opts.add_argument(f"--user-agent={ua}")
-    chrome_path = os.getenv("CHROME_PATH") or os.getenv("GOOGLE_CHROME_BIN")
+    # honor explicit chrome path from workflow
+    chrome_path = os.getenv("CHROME_PATH") or os.getenv("GOOGLE_CHROME_BIN") or os.getenv("CHROME_BIN")
     if chrome_path:
         opts.binary_location = chrome_path
-    driver = webdriver.Chrome(options=opts)  # Selenium Manager จะจัดการ chromedriver ให้เอง
+
+    driver = webdriver.Chrome(options=opts)
     driver.set_page_load_timeout(PAGE_LOAD_TIMEOUT)
     return driver
 
-def close_popup_if_any(driver):
+def stop_loading(driver):
     try:
-        time.sleep(0.6)
-        sels = ['#btnWarning', '.modal [data-bs-dismiss="modal"]', '.modal .btn-close', '.swal2-confirm']
-        for sel in sels:
-            for el in driver.find_elements(By.CSS_SELECTOR, sel):
-                try:
-                    if el.is_displayed() and el.is_enabled():
-                        el.click(); time.sleep(0.3)
-                except Exception:
-                    pass
+        driver.execute_script("window.stop();")
     except Exception:
         pass
 
+def close_popup_if_any(driver):
+    sels = [
+        '#btnWarning', '.modal [data-bs-dismiss="modal"]', '.modal .btn-close',
+        '.swal2-confirm', '.swal2-container .swal2-confirm'
+    ]
+    for sel in sels:
+        els = driver.find_elements(By.CSS_SELECTOR, sel)
+        for el in els:
+            try:
+                if el.is_displayed() and el.is_enabled():
+                    el.click()
+                    time.sleep(0.25)
+            except Exception:
+                pass
+
+def robust_get(driver, url: str, tries: int = 3):
+    def _get():
+        try:
+            driver.get(url)
+            return True
+        except TimeoutException:
+            stop_loading(driver)
+            return True
+    return with_retry(lambda: _get(), tries=tries)
+
 def safe_open_link(driver, el):
-    """พยายามเปิดลิงก์แม้มี overlay"""
-    href = None
     try:
         href = el.get_attribute("href")
     except StaleElementReferenceException:
-        pass
+        href = None
     if href:
-        driver.get(urljoin(BASE, href))
-        return True
+        return robust_get(driver, urljoin(BASE, href))
     try:
         driver.execute_script("arguments[0].scrollIntoView({block:'center'});", el)
-        time.sleep(0.15)
+        time.sleep(0.1)
         el.click()
         return True
     except ElementClickInterceptedException:
@@ -103,39 +152,58 @@ def safe_open_link(driver, el):
     except Exception:
         return False
 
+def find_any_xpath(driver, labels: List[str]) -> List:
+    out=[]
+    for lb in labels:
+        out += driver.find_elements(By.XPATH, f"//a[contains(normalize-space(.),'{lb}')]")
+    return out
+
 def go_home_and_search(driver, tax_id: str):
-    driver.get(f"{BASE}/index")
-    wait = WebDriverWait(driver, 40)
+    robust_get(driver, f"{BASE}/index")
+    wait = WebDriverWait(driver, 30)
     close_popup_if_any(driver)
-    sb = wait.until(EC.visibility_of_element_located((By.CSS_SELECTOR, "input#key-word.form-control")))
-    sb.clear(); sb.send_keys(tax_id); time.sleep(0.2); sb.send_keys(Keys.ENTER)
+
+    def _type_and_submit():
+        sb = wait.until(EC.visibility_of_element_located((By.CSS_SELECTOR, "input#key-word.form-control")))
+        sb.clear(); sb.send_keys(tax_id); time.sleep(0.15); sb.send_keys(Keys.ENTER)
+        return True
+
+    with_retry(_type_and_submit, tries=3)
 
     # ถ้าเข้าหน้าโปรไฟล์ได้เลย
     try:
-        wait.until(EC.presence_of_element_located((By.XPATH, "//h4[contains(.,'เลขทะเบียนนิติบุคคล')]")))
+        WebDriverWait(driver, 12).until(EC.presence_of_element_located((By.XPATH, "//h4[contains(.,'เลขทะเบียนนิติบุคคล')]")))
         return
     except TimeoutException:
         pass
 
-    # หน้า list → คลิกรายละเอียด
-    for label in ["รายละเอียด", "ดูรายละเอียด", "ข้อมูลนิติบุคคล"]:
-        links = driver.find_elements(By.XPATH, f"//a[contains(.,'{label}')]")
-        if links:
-            close_popup_if_any(driver)
-            if safe_open_link(driver, links[0]):
+    # หน้า list → คลิกรายละเอียด (รองรับข้อความหลายแบบ)
+    labels = ["รายละเอียด", "ดูรายละเอียด", "ข้อมูลนิติบุคคล", "Detail", "View"]
+    links = find_any_xpath(driver, labels)
+    if links:
+        close_popup_if_any(driver)
+        if safe_open_link(driver, links[0]):
+            return
+        # fallback เผื่อ href
+        try:
+            href = links[0].get_attribute("href")
+            if href:
+                robust_get(driver, urljoin(BASE, href))
                 return
-            try:
-                href = links[0].get_attribute("href")
-                if href:
-                    driver.get(urljoin(BASE, href))
-                    return
-            except Exception:
-                pass
+        except Exception:
+            pass
 
 def wait_profile_loaded(driver):
-    wait = WebDriverWait(driver, 40)
+    # รอทั้ง h4 และกลุ่มข้อมูลหลัก ๆ
+    wait = WebDriverWait(driver, 30)
     wait.until(EC.presence_of_element_located((By.XPATH, "//h4[contains(.,'เลขทะเบียนนิติบุคคล')]")))
-    time.sleep(0.6)
+    # ให้ layout โหลด
+    time.sleep(0.5)
+
+def looks_blocked_or_empty(html: str) -> bool:
+    text = re.sub(r"\s+", " ", html).lower()
+    bad_keys = ["access denied", "too many requests", "rate limit", "captcha"]
+    return any(k in text for k in bad_keys)
 
 # ========== Parsing ==========
 def extract_text_after_label(soup: BeautifulSoup, label: str) -> str:
@@ -198,25 +266,65 @@ def parse_profile_html(html: str):
         "TSIC ล่าสุด": tsic2_code_name, "วัตถุประสงค์ล่าสุด": tsic2_obj,
     }
 
-def scrape_one_id(driver, tax_id: str):
-    for attempt in range(2):
-        go_home_and_search(driver, tax_id)
+def scrape_one_id(driver, tax_id: str, out_dir: str, logs_dir: str):
+    # 1) ไปหน้าแรก + ค้นหา (มี retry ชั้นใน)
+    with_retry(lambda: go_home_and_search(driver, tax_id), tries=3)
+
+    # 2) รอหน้าโปรไฟล์ (retry ภายนอกเผื่อโหลดไม่ครบ/โดนบล็อก)
+    for attempt in range(3):
         try:
             wait_profile_loaded(driver)
             break
         except TimeoutException:
-            if attempt == 1:
-                # มองว่า "ไม่พบ" (ตามนิยามคุณ)
+            if attempt == 2:
+                # เก็บหลักฐานก่อนสรุป NOT_FOUND
+                save_debug(driver, tax_id, out_dir, logs_dir, tag="timeout-profile")
                 return None
-            time.sleep(1.2)
+            close_popup_if_any(driver)
+            driver.refresh()
+            backoff_sleep(attempt, base=0.6)
 
-    try:
-        WebDriverWait(driver, 12).until(EC.presence_of_element_located((By.CSS_SELECTOR, ".tab1")))
-        html = driver.find_element(By.CSS_SELECTOR, ".tab1").get_attribute("innerHTML") or driver.page_source
-    except Exception:
-        html = driver.page_source
+    # 3) ดึง HTML แบบ robust
+    def _grab_html():
+        try:
+            WebDriverWait(driver, 8).until(EC.presence_of_element_located((By.CSS_SELECTOR, ".tab1")))
+            return driver.find_element(By.CSS_SELECTOR, ".tab1").get_attribute("innerHTML") or driver.page_source
+        except Exception:
+            return driver.page_source
+
+    html = with_retry(_grab_html, tries=2)
+
+    if looks_blocked_or_empty(html):
+        # รีเฟรชหนึ่งทีแล้วลองอีกครั้ง
+        driver.refresh(); time.sleep(0.8)
+        html = _grab_html()
+
     data = parse_profile_html(html)
-    return None if not data.get("เลขทะเบียน") or data["เลขทะเบียน"] in ("-","") else data
+    # ตรวจว่าได้เลขทะเบียนจริงไหม
+    reg_ok = data.get("เลขทะเบียน") and data["เลขทะเบียน"] not in ("-","")
+    if not reg_ok:
+        save_debug(driver, tax_id, out_dir, logs_dir, tag="no-reg")
+        return None
+    return data
+
+def save_debug(driver, tax_id: str, out_dir: str, logs_dir: str, tag: str):
+    canon = canon_tax_id(tax_id)
+    dbg_dir = os.path.join(out_dir, "_debug")
+    os.makedirs(dbg_dir, exist_ok=True)
+    # screenshot
+    try:
+        png = os.path.join(dbg_dir, f"{canon}.{tag}.png")
+        driver.get_screenshot_as_file(png)
+    except Exception:
+        pass
+    # page source
+    try:
+        html_fp = os.path.join(dbg_dir, f"{canon}.{tag}.html")
+        with open(html_fp, "w", encoding="utf-8") as f:
+            f.write(driver.page_source or "")
+    except Exception:
+        pass
+    append_log(os.path.join(logs_dir, "debug_ids.txt"), f"{canon}\t{tag}\t{now_utc_iso()}")
 
 # ========== Data / Sheets helpers ==========
 HEADERS = [
@@ -234,10 +342,10 @@ def read_tax_ids(path: str):
                 line = line.split("#", 1)[0].strip()
                 if not line:
                     continue
-                m = re.search(r"\d{12,13}", line)  # ยอม 12–13 หลักแล้ว normalize ต่อ
+                m = re.search(r"\d{12,13}", line)
                 if m:
                     ids.append(canon_tax_id(m.group(0)))
-    # unique (keep order) — ทำครั้งเดียวตอนเริ่มใช้งานพอ
+    # unique keep order
     seen=set(); out=[]
     for x in ids:
         if x and x not in seen: seen.add(x); out.append(x)
@@ -255,7 +363,7 @@ def open_sheet():
     if not sheet_id:
         raise RuntimeError("SHEET_ID not set.")
     sh = gc.open_by_key(sheet_id)
-    ws = sh.get_worksheet(0)  # gid=0
+    ws = sh.get_worksheet(0)
     first = ws.row_values(1)
     if first != HEADERS:
         ws.resize(1)
@@ -263,25 +371,20 @@ def open_sheet():
     return sh, ws
 
 def sheet_index(ws):
-    """คืน dict: tax_id(canonical) -> row_index"""
     idx = {}
     col = ws.col_values(1)  # A
-    for i, v in enumerate(col[1:], start=2):  # ข้ามหัวตาราง
+    for i, v in enumerate(col[1:], start=2):
         t = canon_tax_id(v)
-        if t:
-            idx[t] = i
+        if t: idx[t] = i
     return idx
 
-def batch_upsert_rows(sh, ws, row_dicts):
-    """
-    อัปเดต/เพิ่มทีเดียวเป็น batch:
-      - ที่มีอยู่แล้ว → values_batch_update
-      - ที่ยังไม่มี   → append_rows
-    """
-    if not row_dicts:
-        return
+def _chunk(it: List[Any], n: int):
+    for i in range(0, len(it), n):
+        yield it[i:i+n]
 
-    last_col_letter = "O"  # A..O = 15 คอลัมน์ตาม HEADERS
+def batch_upsert_rows(sh, ws, row_dicts, chunk_size: int = 200):
+    if not row_dicts: return
+    last_col_letter = "O"  # 15 cols
     existing = sheet_index(ws)
 
     updates = []   # (row_index, values)
@@ -290,25 +393,27 @@ def batch_upsert_rows(sh, ws, row_dicts):
     for rd in row_dicts:
         tax_id = canon_tax_id(rd["tax_id"])
         values = [rd.get(h, "") for h in HEADERS]
-        values[0] = f"'{tax_id}"  # กันศูนย์หาย
+        values[0] = f"'{tax_id}"  # keep leading zero
         if tax_id in existing:
             updates.append((existing[tax_id], values))
         else:
             appends.append(values)
 
-    if updates:
-        updates.sort(key=lambda x: x[0])
+    # batched updates
+    for part in _chunk(updates, chunk_size):
         data_payload = []
-        for row_idx, vals in updates:
+        for row_idx, vals in part:
             rng = f"A{row_idx}:{last_col_letter}{row_idx}"
             data_payload.append({"range": rng, "values": [vals]})
-        sh.values_batch_update(body={
-            "valueInputOption": "RAW",
-            "data": data_payload
-        })
+        def _do():
+            sh.values_batch_update(body={"valueInputOption":"RAW","data": data_payload})
+        with_retry(_do, tries=3)
 
-    if appends:
-        ws.append_rows(appends, value_input_option="RAW")
+    # batched appends
+    for part in _chunk(appends, chunk_size):
+        def _do():
+            ws.append_rows(part, value_input_option="RAW")
+        with_retry(_do, tries=3)
 
 # ========== Main ==========
 def main():
@@ -316,10 +421,9 @@ def main():
     ap.add_argument("--tax-id", default=os.getenv("TAX_ID", "0135563016845"))
     ap.add_argument("--list-file", default="tax_ids.txt")
     ap.add_argument("--out-dir", default="data")
-    ap.add_argument("--limit", type=int, default=20, help="จำนวนต่อรอบ (0=ทั้งหมด)")  # ทำทีละ 20
-    ap.add_argument("--skip-existing", choices=["none","sheet","json","both"], default="sheet",
-                    help="ข้ามเลขที่มีอยู่แล้วใน sheet/json (เฉพาะเคส FOUND)")
-    ap.add_argument("--logs-dir", default=".", help="โฟลเดอร์เก็บไฟล์ log")
+    ap.add_argument("--limit", type=int, default=20, help="จำนวนต่อรอบ (0=ทั้งหมด)")
+    ap.add_argument("--skip-existing", choices=["none","sheet","json","both"], default="sheet")
+    ap.add_argument("--logs-dir", default="logs")
     args = ap.parse_args()
 
     ids_all = read_tax_ids(args.list_file)
@@ -331,9 +435,10 @@ def main():
 
     os.makedirs(args.out_dir, exist_ok=True)
     os.makedirs(args.logs_dir, exist_ok=True)
-    sh, ws = open_sheet()
 
-    # กรองเฉพาะเคส FOUND ที่ทำแล้ว (ไม่ต้องไปซ้ำ)
+    # Sheets อาจล่มชั่วคราว → เปิดด้วย retry
+    sh, ws = with_retry(open_sheet, tries=3)
+
     done_found = set()
     if args.skip_existing in ("sheet","both"):
         done_found |= set(sheet_index(ws).keys())
@@ -341,15 +446,12 @@ def main():
         if os.path.isdir(args.out_dir):
             done_found |= {canon_tax_id(fn[:-5]) for fn in os.listdir(args.out_dir) if fn.endswith(".json")}
 
-    remaining = [t for t in (canon_tax_id(x) for x in ids_all) if t not in done_found]
+    remaining = [t for t in (canon_tax_id(x) for x in ids_all) if t and t not in done_found]
     ids = remaining[: (args.limit if args.limit and args.limit > 0 else None)]
-
     print(f"เหลือในคิว (หลังกรอง FOUND เดิม) {len(remaining)} รายการ → รอบนี้จะทำ {len(ids)} รายการ")
 
-    # เก็บเพื่อ batch & การลบทีเดียว
-    rows_to_upsert = []   # สำหรับ FOUND
-    found_ids = []        # รายการที่ FOUND
-    not_found_ids = []    # รายการที่ NOT_FOUND
+    rows_to_upsert = []
+    found_ids, not_found_ids, fail_ids = [], [], []
 
     driver = build_driver()
     try:
@@ -357,34 +459,46 @@ def main():
         for i, tax_id in enumerate(ids, start=1):
             print(f"\n🔎 [{i}/{total}] ค้นหาเลขภาษี: {tax_id}")
             try:
-                data = scrape_one_id(driver, tax_id)
+                data = scrape_one_id(driver, tax_id, args.out_dir, args.logs_dir)
+            except (NoSuchWindowException, WebDriverException) as e:
+                # รีสตาร์ทไดรเวอร์ 1 ครั้งแล้วลองใหม่เลขเดิม
+                append_log(os.path.join(args.logs_dir, "driver_restart.txt"), f"{now_utc_iso()}\t{tax_id}\t{repr(e)}")
+                try:
+                    driver.quit()
+                except Exception:
+                    pass
+                driver = build_driver()
+                try:
+                    data = scrape_one_id(driver, tax_id, args.out_dir, args.logs_dir)
+                except Exception as e2:
+                    append_log(os.path.join(args.logs_dir, "fail_ids.txt"), f"{tax_id}\t{repr(e2)}")
+                    fail_ids.append(tax_id)
+                    continue
             except Exception as e:
-                print(f"❌ FAIL: {tax_id} error: {e}")
-                append_log(os.path.join(args.logs_dir, "fail_ids.txt"), tax_id)
-                time.sleep(1.0)
+                append_log(os.path.join(args.logs_dir, "fail_ids.txt"), f"{tax_id}\t{repr(e)}")
+                fail_ids.append(tax_id)
                 continue
 
             if not data:
-                print("⚠️  NOT_FOUND → ถือว่าสำเร็จ (จะลบออกจากไฟล์คิวหลังจบรอบ)")
+                print("⚠️  NOT_FOUND (จะลบออกจากไฟล์คิวหลังจบรอบ)")
                 append_log(os.path.join(args.logs_dir, "not_found_ids.txt"), tax_id)
                 not_found_ids.append(tax_id)
             else:
-                # FOUND → save JSON + เก็บไว้ batch-upsert
                 canon = canon_tax_id(tax_id)
                 row = {
                     "tax_id": canon,
                     **data,
-                    "fetched_at_utc": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+                    "fetched_at_utc": now_utc_iso(),
                 }
                 fp = os.path.join(args.out_dir, f"{canon}.json")
-                with open(fp, "w", encoding="utf-8") as f:
-                    json.dump(row, f, ensure_ascii=False, indent=2)
+                safe_write_json(fp, row)
                 print(f"💾 saved: {fp}")
 
                 rows_to_upsert.append(row)
                 found_ids.append(tax_id)
 
-            time.sleep(random.uniform(1.0, 2.0))
+            # คุม rate: ช่วงสั้น ๆ และสุ่ม
+            time.sleep(random.uniform(0.9, 1.9))
     finally:
         try: driver.quit()
         except Exception: pass
@@ -392,7 +506,7 @@ def main():
     # ===== หลังจบรอบ: อัปเดต Google Sheets ทีเดียว =====
     if rows_to_upsert:
         print(f"\n📝 อัปเดต Google Sheets แบบ batch: {len(rows_to_upsert)} แถว …")
-        batch_upsert_rows(sh, ws, rows_to_upsert)
+        with_retry(lambda: batch_upsert_rows(sh, ws, rows_to_upsert), tries=3)
         print("✅ อัปเดตชีตเสร็จ")
 
     # ===== ลบรายการที่สำเร็จออกจากไฟล์คิวทีเดียว =====
@@ -401,9 +515,15 @@ def main():
         remove_ids_from_txt(args.list_file, done_ids)
         print(f"🧹 ลบสำเร็จออกจากคิว: {len(done_ids)} รายการ (FOUND={len(found_ids)}, NOT_FOUND={len(not_found_ids)})")
 
-    if not rows_to_upsert and not not_found_ids:
-        print("\nℹ️ รอบนี้ไม่มีข้อมูลที่พบ/ไม่พบเลย (อาจล้มเหลวทั้งหมด) — ไฟล์คิวไม่ถูกแก้ไข")
+    # ===== สรุปผลรอบ =====
+    print("\n===== SUMMARY =====")
+    print(f"FOUND      : {len(found_ids)}")
+    print(f"NOT_FOUND  : {len(not_found_ids)}")
+    print(f"FAILED     : {len(fail_ids)}")
+    if fail_ids:
+        print("ดู artifacts _debug/*.png และ .html เพื่อไล่ปัญหา")
 
 if __name__ == "__main__":
-    time.sleep(random.uniform(1.2, 2.5))
+    # ลดโอกาส burst พร้อมกันเวลารันตาม cron
+    time.sleep(random.uniform(1.0, 2.5))
     main()
