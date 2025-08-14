@@ -12,11 +12,7 @@ on:
       limit:
         description: "จำนวนต่อรอบ (0=ทั้งหมด)"
         required: false
-        default: "40"
-      offset:
-        description: "ข้ามรายการแรกกี่อัน (ปกติ 0)"
-        required: false
-        default: "0"
+        default: "20"
       skip_existing:
         description: "none/sheet/json/both"
         required: false
@@ -65,15 +61,13 @@ jobs:
           # ใช้ได้ทั้ง schedule และ workflow_dispatch
           INPUT_TAX_ID:  ${{ github.event_name == 'workflow_dispatch' && inputs.tax_id || '' }}
           INPUT_LIMIT:   ${{ github.event_name == 'workflow_dispatch' && inputs.limit || '' }}
-          INPUT_OFFSET:  ${{ github.event_name == 'workflow_dispatch' && inputs.offset || '' }}
           INPUT_SKIP:    ${{ github.event_name == 'workflow_dispatch' && inputs.skip_existing || '' }}
         run: |
           set -euo pipefail
-          LIMIT="${INPUT_LIMIT:-40}"
-          OFFSET="${INPUT_OFFSET:-0}"
+          LIMIT="${INPUT_LIMIT:-20}"
           SKIP="${INPUT_SKIP:-sheet}"
 
-          ARGS=( --list-file tax_ids.txt --limit "$LIMIT" --offset "$OFFSET" --skip-existing "$SKIP" )
+          ARGS=( --list-file tax_ids.txt --limit "$LIMIT" --skip-existing "$SKIP" )
           if [ -n "${INPUT_TAX_ID:-}" ]; then
             ARGS+=( --tax-id "$INPUT_TAX_ID" )
           fi
