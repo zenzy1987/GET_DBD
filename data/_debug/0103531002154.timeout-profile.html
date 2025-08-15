@@ -28,7 +28,218 @@
 	<link href="/css/swiper.css" rel="stylesheet">
 	<link href="/css/jquery.fancybox.css" rel="stylesheet">
 	<link href="/css/global.css" rel="stylesheet">
-</head>
+<style type="text/css">.bn_reset {
+    background: none;
+    border: 0;
+    border-spacing: 0;
+    color: #000;
+    cursor: auto;
+    direction: ltr;
+    font-family: "lucida grande", tahoma, verdana, arial, sans-serif;
+    font-size: 13px;
+    font-style: normal;
+    font-variant: normal;
+    font-weight: normal;
+    letter-spacing: normal;
+    line-height: 1;
+    margin: 0;
+    overflow: visible;
+    padding: 0;
+    text-align: left;
+    text-decoration: none;
+    text-indent: 0;
+    text-shadow: none;
+    text-transform: none;
+    visibility: visible;
+    white-space: normal;
+    word-spacing: normal;
+}
+
+.bn_reset > div {
+    overflow: hidden;
+}
+
+.bn_iframe_widget {
+    display: inline-block;
+    position: relative;
+}
+
+.bn_invisible_flow {
+    display: inherit;
+    height: 0;
+    overflow-x: hidden;
+    width: 0;
+}
+
+.bn_iframe_widget span {
+    display: inline-block;
+    position: relative;
+    text-align: justify;
+}
+
+.bn_iframe_widget iframe {
+    position: absolute;
+}
+
+.bn_customer_chat_bounce_in {
+    animation-duration: 300ms;
+    animation-name: bn_bounce_in;
+    transition-timing-function: ease-in;
+}
+
+.bn_customer_chat_bounce_out {
+    animation-duration: 300ms;
+    animation-name: bn_bounce_out;
+    transition-timing-function: ease-in;
+}
+
+@keyframes bn_bounce_in {
+    0% {
+        opacity: 0;
+        transform: scale(0, 0);
+        transform-origin: bottom right;
+    }
+    50% {
+        transform: scale(1.03, 1.03);
+        transform-origin: bottom right;
+    }
+    100% {
+        opacity: 1;
+        transform: scale(1, 1);
+        transform-origin: bottom right;
+    }
+}
+
+@keyframes bn_bounce_out {
+    0% {
+        opacity: 1;
+        transform: scale(1, 1);
+        transform-origin: bottom right;
+    }
+    100% {
+        opacity: 0;
+        transform: scale(0, 0);
+        transform-origin: bottom right;
+    }
+}
+
+.bn_dialog_advanced {
+    border-radius: 8px;
+    padding: 10px;
+}
+.bn_dialog {
+    background: rgba(82, 82, 82, .7);
+    position: absolute;
+    top: -10000px;
+    z-index: 10001;
+}
+.bn_dialog_content {
+    background: #fff;
+    color: #373737;
+}
+
+.iframe-style {
+    padding: 0px;
+    position: fixed !important;
+    z-index: 2147483646;
+    border-radius: 16px;
+    top: auto;
+    width: 399px;
+    max-height: 0px;
+    background: rgba(0, 0, 0, 0) none repeat scroll 0% 0%;
+    bottom: 85px;
+    right: 4px;
+    margin-right: 12px;
+    visibility: visible;
+    min-height: 0px;
+    height: 732px;
+}
+
+.iframe-style.open {
+    max-height: calc(100% - 80px);
+    min-height: 80vh;
+}
+
+.budge-style {
+    margin: 0px 12px;
+    padding: 0px;
+    cursor: pointer;
+    position: fixed;
+    z-index: 2147483644;
+    bottom: 24px;
+    top: auto;
+    height: 60px;
+    width: 60px;
+    border-radius: 29px;
+    box-shadow: rgba(0, 0, 0, 0.15) 0px 4px 12px 0px;
+    background-repeat: no-repeat;
+    background-size: 80%;
+    background-position: center center;
+    display: block;
+    right: 12px;
+}
+
+@media only screen and (max-width: 599.99px) and (orientation: portrait) {  
+    .iframe-style.mobile {
+        position: fixed !important;
+        z-index: 2147483646;
+        box-shadow: none;
+        border-radius: 0px;
+        top: 0px;
+        right: 0px;
+        height: 100%;
+        width: 100%;
+        visibility: visible;
+        max-height: 0px;
+        min-height: 0px !important;
+        bottom: unset !important;
+        margin-right: 0 !important;
+    }
+    .iframe-style.mobile.open {
+        max-height: calc(100% - 85px);
+    }
+}
+@media only screen and (max-width: 959.99px) and (orientation: landscape) {  
+    .iframe-style.mobile {
+        position: fixed !important;
+        z-index: 2147483646;
+        box-shadow: none;
+        border-radius: 0px;
+        top: 0px;
+        right: 0px;
+        height: 100%;
+        width: 100%;
+        visibility: visible;
+        max-height: 0px;
+        min-height: 0px !important;
+        bottom: unset !important;
+        margin-right: 0 !important;
+    }
+    .iframe-style.mobile.open {
+        max-height: calc(100% - 85px);
+    }
+}
+@media only screen and (min-width: 600px) and (max-width: 839.99px) and (orientation: portrait) {  
+    .iframe-style.mobile {
+        position: fixed !important;
+        z-index: 2147483646;
+        box-shadow: none;
+        border-radius: 0px;
+        top: 0px;
+        right: 0px;
+        height: 100%;
+        width: 100%;
+        visibility: visible;
+        max-height: 0px;
+        min-height: 0px !important;
+        bottom: unset !important;
+        margin-right: 0 !important;
+    }
+    .iframe-style.mobile.open {
+        max-height: calc(100% - 85px);
+    }
+}
+</style></head>
 
 <body> 
 	<div class="preload" style="display: none;"></div>
@@ -351,7 +562,8 @@
 	<p id="chat" style="cursor: pointer;">เริ่มต้นแชท</p>
 </div>
 
-<div id="bn-root"></div>
+<div id="bn-root" class="bn_reset"><div class="bn-customerchat bn_invisible_flow bn_iframe_widget" bot_id="622b2cce36815ac33dad0915" bot_logo="https://bn-sme-production.s3.amazonaws.com/622b2cce36815ac33dad0915/b219c5fd-0055-4a60-a7bf-20b1d1e827ad.png" bot_name="น้อง SUPER" locale="th" theme_color="#cde3fa" logged_in_greeting="น้อง SUPER สวัสดีครับ ผมเป็น Chatbot ผู้ช่วยในการใช้งาน DBD DataWarehouse+ สอบถามข้อมูลคลิกที่ปุ่มด้านล่างเพื่อเริ่มการสนทนาได้เลยนะครับ Chatbot only available in Thai language" greeting_message="Botnoi_Greeting">
+<span style="vertical-align: bottom; width: 1000px; height: 0px;"><iframe class="iframe-style bn_customer_chat_bounce_out" allowfullscreen="" height="1000px" width="1000px" frameborder="0" scrolling="none" allow="encrypted-media" src="https://console.botnoi.ai/customer-chat?bot_id=622b2cce36815ac33dad0915&amp;bot_logo=https://bn-sme-production.s3.amazonaws.com/622b2cce36815ac33dad0915/b219c5fd-0055-4a60-a7bf-20b1d1e827ad.png&amp;bot_name=น้อง SUPER&amp;theme_color=%23cde3fa&amp;logged_in_greeting=น้อง SUPER สวัสดีครับ ผมเป็น Chatbot ผู้ช่วยในการใช้งาน DBD DataWarehouse+ สอบถามข้อมูลคลิกที่ปุ่มด้านล่างเพื่อเริ่มการสนทนาได้เลยนะครับ Chatbot only available in Thai language&amp;greeting_message=Botnoi_Greeting&amp;locale=th_TH"></iframe></span></div><div class="bn_dialog bn_dialog_advanced" style="overflow: visible; z-index: 2147483644;"><div class="bn_dialog_content"><div class="budge-style" style="background-color: rgb(205, 227, 250); background-image: url(&quot;https://bn-sme-production.s3.amazonaws.com/622b2cce36815ac33dad0915/b219c5fd-0055-4a60-a7bf-20b1d1e827ad.png&quot;);"></div></div></div></div>
 <script>
 	window.onload = function() {
 		BN.init({
@@ -370,8 +582,7 @@
 		bjs.parentNode.insertBefore(js, bjs);
 	})(document, "script", "bn-jssdk");
 </script>
-<div class="bn-customerchat" bot_id="622b2cce36815ac33dad0915" bot_logo="https://bn-sme-production.s3.amazonaws.com/622b2cce36815ac33dad0915/b219c5fd-0055-4a60-a7bf-20b1d1e827ad.png" bot_name="น้อง SUPER" locale="th" theme_color="#cde3fa" logged_in_greeting="น้อง SUPER สวัสดีครับ ผมเป็น Chatbot ผู้ช่วยในการใช้งาน DBD DataWarehouse+ สอบถามข้อมูลคลิกที่ปุ่มด้านล่างเพื่อเริ่มการสนทนาได้เลยนะครับ Chatbot only available in Thai language" greeting_message="Botnoi_Greeting">
-</div>
+
 
 <footer class="footer">
 	<div class="container">
