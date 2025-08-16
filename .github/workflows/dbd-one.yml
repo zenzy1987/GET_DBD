@@ -21,6 +21,7 @@ on:
     # ทุก 30 นาที (UTC) → ไทย = UTC+7
     - cron: "*/30 * * * *"
 
+# กันรันซ้อนต่อสาขา (branch) ระดับ workflow
 concurrency:
   group: dbd-one-${{ github.ref }}
   cancel-in-progress: false
@@ -28,7 +29,7 @@ concurrency:
 jobs:
   run:
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 60  # ลดเวลาเพราะไม่ใช้ Selenium แล้ว
 
     steps:
       - uses: actions/checkout@v4
@@ -39,24 +40,20 @@ jobs:
           python-version: "3.12"
           cache: "pip"
 
-      - name: Setup Chrome
-        id: chrome
-        uses: browser-actions/setup-chrome@v1
-
-      - name: Remove stale chromedriver in PATH
-        run: sudo rm -f /usr/bin/chromedriver || true
+      # ✅ ไม่ต้องติดตั้ง Chrome/Chromedriver อีกต่อไป
 
       - name: Install deps
         run: |
           python -m pip install -U pip
           pip install -r requirements.txt
 
-      - name: Run DBD batch → Google Sheets
+      - name: Run DBD (Open-DBD API → Google Sheets)
         env:
-          CHROME_PATH: ${{ steps.chrome.outputs.chrome-path }}
-          CHROME_BIN:  ${{ steps.chrome.outputs.chrome-path }}
           GOOGLE_CREDENTIALS_JSON: ${{ secrets.GOOGLE_CREDENTIALS_JSON }}
           SHEET_ID: ${{ vars.SHEET_ID }}
+          # กันรันซ้อนในโปรเซส: ตั้งชื่อไฟล์ล็อกเฉพาะงานนี้ (จะสร้าง/ลบอัตโนมัติ)
+          LOCK_FILE: .open_dbd.lock
+          LOCK_TTL_SEC: "7200"  # 2 ชั่วโมง (กรณีโปรเซสตายค้าง)
 
           INPUT_TAX_ID:  ${{ github.event_name == 'workflow_dispatch' && inputs.tax_id || '' }}
           INPUT_LIMIT:   ${{ github.event_name == 'workflow_dispatch' && inputs.limit || '' }}
@@ -66,15 +63,16 @@ jobs:
           LIMIT="${INPUT_LIMIT:-20}"
           SKIP="${INPUT_SKIP:-sheet}"
 
-          echo "Chrome at: ${CHROME_PATH:-unset}"
           python -V
 
+          # ใช้สคริปต์ API ฟรี (ไม่ใช้ Selenium) — ปรับชื่อไฟล์ตามที่คุณวางใน repo
           ARGS=( --list-file tax_ids.txt --limit "$LIMIT" --skip-existing "$SKIP" --logs-dir logs )
           if [ -n "${INPUT_TAX_ID:-}" ]; then
             ARGS+=( --tax-id "$INPUT_TAX_ID" )
           fi
 
-          python dbd_one.py "${ARGS[@]}" | tee result.txt
+          # ตัวสคริปต์มีไฟล์ล็อกกันรันซ้อนในตัวแล้ว (LOCK_FILE / LOCK_TTL_SEC)
+          python open_dbd_one.py "${ARGS[@]}" | tee result.txt
 
           echo "## DBD Result (last 300 lines)" >> "$GITHUB_STEP_SUMMARY"
           tail -n 300 result.txt || true >> "$GITHUB_STEP_SUMMARY"
@@ -103,7 +101,5 @@ jobs:
           name: dbd-artifacts
           path: |
             data/*.json
-            data/_debug/*.png
-            data/_debug/*.html
             logs/*.txt
           if-no-files-found: ignore
